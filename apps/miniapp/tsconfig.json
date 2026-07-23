@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "types": ["miniprogram-api-typings", "vitest/globals", "node"],
+    "lib": ["ES2022"]
+  },
+  "include": ["miniprogram/**/*.ts", "tests/**/*.ts"]
+}

@@ -1,0 +1,5 @@
+<view class="my-page">
+  <view class="empty-state">
+    <text>绑定手机号后查看会员资产</text>
+  </view>
+</view>

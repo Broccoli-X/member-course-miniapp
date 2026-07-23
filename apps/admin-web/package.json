@@ -1,0 +1,27 @@
+{
+  "name": "@member-course/admin-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src/",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run --reporter=verbose",
+    "test:e2e": "echo 'e2e tests configured in later tasks'",
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "element-plus": "^2.14.3",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "vite": "^8.1.5",
+    "vue-tsc": "^3.3.7"
+  }
+}

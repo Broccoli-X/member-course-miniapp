@@ -1,0 +1,11 @@
+<view class="courses-page">
+  <block wx:if="{{courses.length > 0}}">
+    <view class="course-card" wx:for="{{courses}}" wx:key="id">
+      <text>{{item.name}}</text>
+      <text class="course-desc">{{item.description}}</text>
+    </view>
+  </block>
+  <view class="empty-state" wx:else>
+    <text>暂无已上架课程</text>
+  </view>
+</view>

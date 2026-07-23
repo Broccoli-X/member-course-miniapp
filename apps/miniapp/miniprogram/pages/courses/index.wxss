@@ -1,0 +1,23 @@
+.courses-page {
+  padding: 24rpx;
+}
+.course-card {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+}
+.course-desc {
+  display: block;
+  color: #999999;
+  font-size: 24rpx;
+  margin-top: 12rpx;
+}
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 120rpx 0;
+  color: #999999;
+  font-size: 28rpx;
+}

@@ -1,0 +1,15 @@
+{
+  "description": "会员课时管理小程序",
+  "miniprogramRoot": "miniprogram/",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "appid": "touristappid",
+  "projectname": "member-course-miniapp",
+  "compileType": "miniprogram",
+  "libVersion": "3.5.5"
+}

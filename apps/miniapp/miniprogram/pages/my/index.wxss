@@ -1,0 +1,11 @@
+.my-page {
+  padding: 24rpx;
+}
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 120rpx 0;
+  color: #999999;
+  font-size: 28rpx;
+}
