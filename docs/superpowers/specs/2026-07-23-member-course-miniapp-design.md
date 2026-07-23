@@ -1,7 +1,8 @@
 # 教培会员课时小程序产品与技术设计
 
-- 文档状态：已完成方案确认，待用户审阅书面规格
+- 文档状态：用户已确认，实施计划已完成，待选择执行方式
 - 日期：2026-07-23
+- 仓库地址：`https://github.com/Broccoli-X/member-course-miniapp.git`
 - 产品范围：单机构、单校区、2C 教培/兴趣班会员管理
 - 目标技术栈：微信原生小程序、Vue 3、NestJS、Prisma、MySQL
 
@@ -81,6 +82,7 @@ flowchart TB
         BOOKING["预约与签到"]
         ACTIVITY["活动运营"]
         NOTIFY["消息通知"]
+        HOME_QUERY["首页与工作台组合查询"]
     end
 
     subgraph PLATFORM["平台能力"]
@@ -101,6 +103,12 @@ flowchart TB
     ADMIN --> ADMIN_API
     MINI_API --> DOMAIN
     ADMIN_API --> DOMAIN
+    IDENTITY --> HOME_QUERY
+    ORDER --> HOME_QUERY
+    HOURS --> HOME_QUERY
+    SCHEDULE --> HOME_QUERY
+    BOOKING --> HOME_QUERY
+    ACTIVITY --> HOME_QUERY
     DOMAIN --> PLATFORM
     DOMAIN --> MYSQL
     PLATFORM --> MYSQL
@@ -336,6 +344,8 @@ stateDiagram-v2
 
 微信发送失败不回滚订单、预约、考勤或活动状态。以“领域事件 ID + 对象版本 + 消息类型 + 接收账号”建立唯一键，避免同一事件重复发送，同时允许同一课次多次合法调课通知。取消预约、取消活动或调课时，系统作废尚未发送的旧提醒，并按最新对象版本重建提醒；已经发送的消息只追加更正通知。只有用户已授权对应订阅模板时才发送。
 
+若 worker 在请求微信后、保存发送结果前中断，系统无法可靠判断微信是否已接收。此类记录标记为“投递结果未知”，不得自动重发；管理员核对后再决定关闭或人工重试，避免把外部调用误当成数据库内的恰好一次事务。
+
 ## 6. 核心数据模型
 
 ~~~mermaid
@@ -393,7 +403,7 @@ erDiagram
 - `ClassSession` 保存来源规则版本 ID 及完整规则快照；后续只使用快照结算。
 - 课程规则快照随课次发布后不可变。
 - 被订单、课次、预约或流水引用的会员、学员、课程、老师和教室只能停用或归档。
-- 所有关键表包含创建时间、更新时间和版本号；状态迁移使用条件更新或版本号防止覆盖。
+- 所有可变关键表包含创建时间、更新时间和版本号；仅追加的流水、分配和审计表包含创建时间且禁止更新/删除。状态迁移使用条件更新或版本号防止覆盖。
 - 时间统一存储为 UTC，业务规则和展示使用 `Asia/Shanghai`。取消截止时刻等于边界视为按时，超过才算超时。
 - `AuditLog.actor_type` 为 `ADMIN`、`MEMBER` 或 `SYSTEM`；对应操作人 ID 可为空，仅系统定时任务使用 `SYSTEM`。
 
