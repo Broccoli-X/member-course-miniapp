@@ -5,6 +5,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/miniprogram/**/*.wxml'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/src/generated/**',
+      '**/miniprogram/**/*.wxml',
+    ],
   },
 );

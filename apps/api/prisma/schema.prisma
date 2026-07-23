@@ -1,0 +1,298 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Identity ──────────────────────────────────────────
+
+model AdminUser {
+  id               String    @id @default(uuid())
+  username         String    @unique
+  passwordHash     String
+  status           String    @default("ACTIVE") // ACTIVE | LOCKED | DISABLED
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @db.DateTime(3)
+  updatedAt        DateTime  @updatedAt @db.DateTime(3)
+  version          Int       @default(1)
+
+  refreshSessions RefreshSession[] @relation("AdminRefreshSessions")
+
+  @@map("admin_user")
+}
+
+model MemberAccount {
+  id             String    @id @default(uuid())
+  normalizedPhone String?  @unique @db.VarChar(20)
+  status         String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  isProvisional  Boolean   @default(false)
+  createdAt      DateTime  @default(now()) @db.DateTime(3)
+  updatedAt      DateTime  @updatedAt @db.DateTime(3)
+  version        Int       @default(1)
+
+  wechatIdentities     WechatIdentity[]
+  refreshSessions      RefreshSession[] @relation("MemberRefreshSessions")
+  studentRelations     AccountStudentRelation[]
+  orders               OfflineOrder[]
+
+  @@map("member_account")
+}
+
+model WechatIdentity {
+  id        String   @id @default(uuid())
+  accountId String
+  openId    String   @unique @db.VarChar(128)
+  unionId   String?  @db.VarChar(128)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  version   Int      @default(1)
+
+  account MemberAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([unionId])
+  @@map("wechat_identity")
+}
+
+model RefreshSession {
+  id              String    @id @default(uuid())
+  adminUserId     String?
+  memberAccountId String?
+  tokenHash       String    @db.VarChar(128)
+  expiresAt       DateTime  @db.DateTime(3)
+  revokedAt       DateTime? @db.DateTime(3)
+  createdAt       DateTime  @default(now()) @db.DateTime(3)
+  updatedAt       DateTime  @updatedAt @db.DateTime(3)
+  version         Int       @default(1)
+
+  adminUser   AdminUser?     @relation("AdminRefreshSessions", fields: [adminUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  memberAccount MemberAccount? @relation("MemberRefreshSessions", fields: [memberAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("refresh_session")
+}
+
+// ── Students ──────────────────────────────────────────
+
+model StudentProfile {
+  id         String    @id @default(uuid())
+  displayName String   @db.VarChar(50)
+  birthDate  DateTime? @db.Date
+  status     String    @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  updatedAt  DateTime  @updatedAt @db.DateTime(3)
+  version    Int       @default(1)
+
+  accountRelations  AccountStudentRelation[]
+  orderItems        OrderItem[]
+  coursePackages    CoursePackage[]
+  balances          StudentCourseBalance[]
+  hourTransactions  HourTransaction[]
+
+  @@map("student_profile")
+}
+
+model AccountStudentRelation {
+  id               String   @id @default(uuid())
+  accountId        String
+  studentId        String
+  relationType     String   @db.VarChar(20) // PARENT | GUARDIAN | SELF
+  verifiedByAdminId String?
+  createdAt        DateTime @default(now()) @db.DateTime(3)
+  updatedAt        DateTime @updatedAt @db.DateTime(3)
+  version          Int      @default(1)
+
+  account MemberAccount  @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([accountId, studentId])
+  @@map("account_student_relation")
+}
+
+// ── Catalog ───────────────────────────────────────────
+
+model Course {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  type        String   @db.VarChar(20) // CLASS | ONE_TO_ONE
+  description String   @db.Text
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  updatedAt   DateTime @updatedAt @db.DateTime(3)
+  version     Int      @default(1)
+
+  packages    PackageProduct[]
+  orderItems  OrderItem[]
+  balances    StudentCourseBalance[]
+  transactions HourTransaction[]
+  coursePackages CoursePackage[]
+
+  @@map("course")
+}
+
+model PackageProduct {
+  id        String   @id @default(uuid())
+  courseId  String
+  name      String   @db.VarChar(100)
+  price     Decimal  @db.Decimal(10, 2)
+  hours     Decimal  @db.Decimal(10, 2)
+  validDays Int
+  status    String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  version   Int      @default(1)
+
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@map("package_product")
+}
+
+// ── Orders ────────────────────────────────────────────
+
+model OfflineOrder {
+  id           String    @id @default(uuid())
+  buyerAccountId String
+  status       String    @default("PENDING") // PENDING | CONFIRMED | REVERSED
+  totalAmount  Decimal   @db.Decimal(10, 2)
+  confirmedAt  DateTime? @db.DateTime(3)
+  createdAt    DateTime  @default(now()) @db.DateTime(3)
+  updatedAt    DateTime  @updatedAt @db.DateTime(3)
+  version      Int       @default(1)
+
+  buyerAccount MemberAccount @relation(fields: [buyerAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items        OrderItem[]
+
+  @@map("offline_order")
+}
+
+model OrderItem {
+  id                  String   @id @default(uuid())
+  orderId             String
+  studentId           String
+  productId           String
+  courseId            String
+  productNameSnapshot String   @db.VarChar(100)
+  unitPriceSnapshot   Decimal  @db.Decimal(10, 2)
+  hoursSnapshot       Decimal  @db.Decimal(10, 2)
+  validDaysSnapshot   Int
+  createdAt           DateTime @default(now()) @db.DateTime(3)
+  updatedAt           DateTime @updatedAt @db.DateTime(3)
+  version             Int      @default(1)
+
+  order      OfflineOrder    @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  student    StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product    PackageProduct  @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course     Course          @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  coursePackage CoursePackage?
+
+  @@map("order_item")
+}
+
+// ── Lesson Hours ──────────────────────────────────────
+
+model CoursePackage {
+  id                 String   @id @default(uuid())
+  studentId          String
+  courseId           String
+  sourceType         String   @db.VarChar(20) // ORDER | MANUAL_GRANT | MANUAL_ADJUSTMENT
+  sourceOrderItemId  String?  @unique
+  startsOn           DateTime @db.Date
+  expiresOn          DateTime @db.Date
+  granted            Decimal  @db.Decimal(10, 2)
+  available          Decimal  @db.Decimal(10, 2)
+  reserved           Decimal  @db.Decimal(10, 2)
+  consumed           Decimal  @db.Decimal(10, 2)
+  expired            Decimal  @db.Decimal(10, 2)
+  status             String   @default("ACTIVE") // ACTIVE | EXPIRED | EXHAUSTED
+  createdAt          DateTime @default(now()) @db.DateTime(3)
+  updatedAt          DateTime @updatedAt @db.DateTime(3)
+  version            Int      @default(1)
+
+  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sourceOrderItem OrderItem? @relation(fields: [sourceOrderItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  allocations HourAllocation[]
+
+  @@map("course_package")
+}
+
+model StudentCourseBalance {
+  id        String   @id @default(uuid())
+  studentId String
+  courseId  String
+  available Decimal  @db.Decimal(10, 2)
+  reserved  Decimal  @db.Decimal(10, 2)
+  consumed  Decimal  @db.Decimal(10, 2)
+  expired   Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  version   Int      @default(1)
+
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course  Course         @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([studentId, courseId])
+  @@map("student_course_balance")
+}
+
+model HourTransaction {
+  id                    String   @id @default(uuid())
+  studentId             String
+  courseId              String
+  type                  String   @db.VarChar(30) // GRANT | DEBIT | MANUAL_GRANT | MANUAL_DEDUCT | REVERSAL
+  businessKey           String   @unique @db.VarChar(200)
+  availableDelta        Decimal  @db.Decimal(10, 2)
+  reservedDelta         Decimal  @db.Decimal(10, 2)
+  consumedDelta         Decimal  @db.Decimal(10, 2)
+  expiredDelta          Decimal  @db.Decimal(10, 2)
+  reason                String?  @db.Text
+  occurredAt            DateTime @db.DateTime(3)
+  createdAt             DateTime @default(now()) @db.DateTime(3)
+
+  student     StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course      Course            @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  allocations HourAllocation[]
+
+  @@map("hour_transaction")
+}
+
+model HourAllocation {
+  id             String   @id @default(uuid())
+  transactionId  String
+  packageId      String
+  sourceType     String   @db.VarChar(20)
+  sourceId       String
+  availableDelta Decimal  @db.Decimal(10, 2)
+  reservedDelta  Decimal  @db.Decimal(10, 2)
+  consumedDelta  Decimal  @db.Decimal(10, 2)
+  expiredDelta   Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+
+  transaction HourTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  package     CoursePackage   @relation(fields: [packageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("hour_allocation")
+}
+
+// ── Idempotency ───────────────────────────────────────
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid())
+  scope          String   @db.VarChar(50)
+  actorId        String   @db.VarChar(100)
+  key            String   @db.VarChar(100)
+  requestHash    String   @db.VarChar(128)
+  state          String   @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | FAILED
+  responseStatus Int?
+  responseBody   String?  @db.LongText
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @db.DateTime(3)
+  version        Int      @default(1)
+
+  @@unique([scope, actorId, key])
+  @@map("idempotency_record")
+}

@@ -6,26 +6,31 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=verbose",
-    "test:integration": "echo 'integration tests configured in Task 2'",
+    "test:integration": "RUN_INTEGRATION=1 vitest run --config vitest.integration.config.ts --reporter=verbose",
     "test:e2e": "echo 'e2e tests configured in later tasks'",
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "prisma": "prisma",
-    "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate"
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
+    "@prisma/client": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
     "@nestjs/testing": "^11.1.28",
+    "@testcontainers/mysql": "^11.5.0",
     "@types/supertest": "^7.2.1",
-    "supertest": "^7.2.2"
+    "mysql2": "^3.15.2",
+    "prisma": "^6.19.3",
+    "supertest": "^7.2.2",
+    "testcontainers": "^12.0.4"
   }
 }
