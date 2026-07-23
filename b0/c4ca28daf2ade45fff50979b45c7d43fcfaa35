@@ -1,0 +1,21 @@
+docs/superpowers/specs/2026-07-23-member-course-miniapp-design.md
+  s_cb73caafc17375::t_5fda5cfe65e777 171,181-184,204-205,223,237,267,282,284-285,301-303,309,323-324,337,351,359,372,376,382-383,392-393,398,447,467-468,530,534,538-540
+  s_cb73caafc17375::t_6e04f1f7937b1a 206-208,229,263-266,283,349,352,366-368,391,408,506
+  s_cb73caafc17375::t_06ddecf3169080 168,319-320,424,503
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b0c4ca28daf2ade45fff50979b45c7d43fcfaa35",
+  "prompts": {},
+  "sessions": {
+    "s_cb73caafc17375": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8db4-697a-74e0-ae72-6915eba4fbdb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "夏礼华 <xlh4909@ly.com>"
+    }
+  }
+}
