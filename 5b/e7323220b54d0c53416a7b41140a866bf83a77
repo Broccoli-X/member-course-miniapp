@@ -1,0 +1,19 @@
+apps/api/test/helpers/mysql-test-environment.ts
+  s_d30445c9c026a9::t_ae71d6b196d541 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5be7323220b54d0c53416a7b41140a866bf83a77",
+  "prompts": {},
+  "sessions": {
+    "s_d30445c9c026a9": {
+      "agent_id": {
+        "tool": "ZCode",
+        "id": "sess_f801c07c-eac3-4ec2-a723-23dbdf7ea301",
+        "model": "GLM-5.2"
+      },
+      "human_author": "夏礼华 <xlh4909@ly.com>"
+    }
+  }
+}
