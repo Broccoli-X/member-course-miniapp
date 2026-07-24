@@ -1,0 +1,19 @@
+apps/api/test/helpers/m1-schema-fixtures.ts
+  s_d30445c9c026a9::t_2b79a24f850b4a 74-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7f1d00ba96fcf6dfd90f2e56f900331be193c8af",
+  "prompts": {},
+  "sessions": {
+    "s_d30445c9c026a9": {
+      "agent_id": {
+        "tool": "ZCode",
+        "id": "sess_f801c07c-eac3-4ec2-a723-23dbdf7ea301",
+        "model": "GLM-5.2"
+      },
+      "human_author": "夏礼华 <xlh4909@ly.com>"
+    }
+  }
+}
