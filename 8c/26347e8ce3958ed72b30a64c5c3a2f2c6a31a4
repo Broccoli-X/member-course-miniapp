@@ -1,0 +1,49 @@
+apps/api/package.json
+  s_cb73caafc17375::t_ab6cb9b5c08d2c 19,24-27,35
+apps/api/prisma/migration.sql
+  s_cb73caafc17375::t_c9b50b2569515e 1-236
+apps/api/src/app.module.ts
+  s_cb73caafc17375::t_857a1b7c1ff73f 1,4-5,10,12-16
+apps/api/src/common/errors/business-error.filter.ts
+  s_cb73caafc17375::t_6dbb38ca1f8995 1-54
+apps/api/src/common/errors/business-error.ts
+  s_cb73caafc17375::t_28e0d960fda256 1-44
+apps/api/src/common/http/pagination.dto.spec.ts
+  s_cb73caafc17375::t_194299fd261b30 1-27
+apps/api/src/common/http/trace-id.middleware.ts
+  s_cb73caafc17375::t_0cb5d67299af67 1-13
+apps/api/src/common/idempotency/idempotency.service.ts
+  s_cb73caafc17375::t_fabce7083ba3b6 1-87
+apps/api/src/common/time/business-date.spec.ts
+  s_cb73caafc17375::t_8df9416908c4fa 1-18
+apps/api/src/main.ts
+  s_cb73caafc17375::t_bf2c2ced124de7 3,8
+apps/api/src/types/express.d.ts
+  s_cb73caafc17375::t_d53c45a4c4a450 1-5
+packages/contracts/src/common.ts
+  s_cb73caafc17375::t_a1e2cab1ae76be 1-7
+packages/contracts/src/errors.ts
+  s_cb73caafc17375::t_f020ac419f78f4 1-29
+packages/contracts/src/index.ts
+  s_cb73caafc17375::t_c3a660f703499b 2-5
+packages/contracts/src/pagination.ts
+  s_cb73caafc17375::t_70687ee45a2a24 1-13
+pnpm-lock.yaml
+  s_cb73caafc17375::t_673be5ce445c96 66-68,71,74,77,81-92,105,109-111,1115-1117,1121-1123,1145-1153,1181-1192,1208-1210,1752-1757,1914-1921,2559-2561,3597-3600,4411,4420-4422,4426,4428,4437,4439,4441-4442,4464,4466-4467,4470,4693-4697,4703-4706,4734-4748,4777-4789,4815-4816,5462-5469,5619-5624,6350-6351,7417-7418
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "8c26347e8ce3958ed72b30a64c5c3a2f2c6a31a4",
+  "prompts": {},
+  "sessions": {
+    "s_cb73caafc17375": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8db4-697a-74e0-ae72-6915eba4fbdb",
+        "model": "glm-5.2"
+      },
+      "human_author": "夏礼华 <xlh4909@ly.com>"
+    }
+  }
+}
