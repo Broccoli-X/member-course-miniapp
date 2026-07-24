@@ -41,6 +41,13 @@ export const ERROR_CODES = {
    * integer (e.g. `0`). Valid days represent an expiry duration and must be > 0.
    */
   VALID_DAYS_INVALID: 'VALID_DAYS_INVALID',
+  /**
+   * Raised when reversing a CONFIRMED order whose lesson-hour package already
+   * has a posting (consumption/adjustment) after the original GRANT. A package
+   * with downstream activity cannot be cleanly reversed — the order must be
+   * reversed before any consumption. Mapped to HTTP 409 CONFLICT.
+   */
+  ORDER_NOT_REVERSIBLE: 'ORDER_NOT_REVERSIBLE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

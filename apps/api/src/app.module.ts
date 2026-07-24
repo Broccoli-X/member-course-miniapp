@@ -6,9 +6,10 @@ import { IdempotencyService } from './common/idempotency/idempotency.service.js'
 import { IdentityModule } from './modules/identity/identity.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { HoursModule } from './modules/hours/hours.module.js';
+import { OrdersModule } from './modules/orders/orders.module.js';
 
 @Module({
-  imports: [PrismaModule, IdentityModule, CatalogModule, HoursModule],
+  imports: [PrismaModule, IdentityModule, CatalogModule, HoursModule, OrdersModule],
   controllers: [HealthController],
   providers: [IdempotencyService],
 })

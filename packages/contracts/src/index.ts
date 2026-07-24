@@ -7,3 +7,4 @@ export * from './auth.js';
 export * from './member.js';
 export * from './catalog.js';
 export * from './hours.js';
+export * from './order.js';
