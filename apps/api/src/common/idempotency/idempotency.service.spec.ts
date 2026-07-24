@@ -109,4 +109,17 @@ describe('IdempotencyService', () => {
       service.execute({ ...request, requestHash: 'other' }, work),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED', httpStatus: 409 });
   });
+
+  it('executes one transaction for concurrent identical requests', async () => {
+    const mockDb = createMockDb();
+    const service = new IdempotencyService(mockDb);
+    const request: IdempotentRequest = { scope: 'order-confirm', actorId: 'admin-1', key: 'order-1', requestHash: 'abc123' };
+    const work = vi.fn(async () => ({ orderId: 'order-1' }));
+    const [first, second] = await Promise.all([
+      service.execute(request, work),
+      service.execute(request, work),
+    ]);
+    expect(first).toEqual(second);
+    expect(work).toHaveBeenCalledTimes(1);
+  });
 });

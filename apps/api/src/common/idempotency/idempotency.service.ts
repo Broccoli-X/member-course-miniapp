@@ -12,9 +12,39 @@ export interface IdempotentRequest {
 
 @Injectable()
 export class IdempotencyService {
+  /**
+   * In-process dedup map keyed by `${scope}:${actorId}:${key}`. When two
+   * concurrent callers hit the same idempotency key before either writes a
+   * row, they would both see `findUnique → null` and run `work` twice. This
+   * map stores the in-flight Promise so the second caller awaits the first's
+   * result. Entries are always removed in `finally` so completed rows are
+   * served from the DB cache path and transient failures don't poison the key.
+   */
+  private readonly inFlight = new Map<string, Promise<unknown>>();
+
   constructor(private readonly db: PrismaService) {}
 
   async execute<T>(
+    request: IdempotentRequest,
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    const dedupKey = `${request.scope}:${request.actorId}:${request.key}`;
+
+    const inflight = this.inFlight.get(dedupKey);
+    if (inflight) {
+      return inflight as Promise<T>;
+    }
+
+    const promise = this.executeUnchecked<T>(request, work);
+    this.inFlight.set(dedupKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.inFlight.delete(dedupKey);
+    }
+  }
+
+  private async executeUnchecked<T>(
     request: IdempotentRequest,
     work: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {

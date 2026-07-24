@@ -9,7 +9,7 @@ export class BusinessErrorFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
     const request = ctx.getRequest<{ headers: Record<string, string | string[] | undefined>; traceId?: string }>();
-    const traceId = request.headers['x-trace-id'] as string ?? request.traceId ?? 'unknown';
+    const traceId = request.traceId ?? (request.headers['x-trace-id'] as string) ?? 'unknown';
 
     let code: string;
     let message: string;
