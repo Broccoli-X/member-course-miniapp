@@ -9,7 +9,7 @@ export interface MysqlTestContext {
 
 const DEFAULT_URL =
   process.env.TEST_DATABASE_URL ??
-  'mysql://root:devpassword@127.0.0.1:3307/member_course_test';
+  'mysql://root@127.0.0.1:3306/member_course_test';
 
 /**
  * Checks whether a local MySQL instance is reachable on the test port.
