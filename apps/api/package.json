@@ -7,20 +7,26 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=verbose",
     "test:integration": "RUN_INTEGRATION=1 vitest run --config vitest.integration.config.ts --reporter=verbose",
-    "test:e2e": "echo 'e2e tests configured in later tasks'",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "prisma": "prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:validate": "prisma validate --schema prisma/schema.prisma"
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
+    "prisma:seed": "prisma db seed --schema prisma/schema.prisma"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types --no-warnings prisma/seed.ts"
   },
   "dependencies": {
     "@member-course/contracts": "workspace:*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.1.28",
     "@prisma/client": "^6.19.3",
+    "argon2": "^0.45.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "date-fns": "^4.4.0",
@@ -31,12 +37,14 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
     "@nestjs/testing": "^11.1.28",
+    "@swc/core": "^1.15.46",
     "@testcontainers/mysql": "^11.5.0",
     "@types/express": "^5.0.6",
     "@types/supertest": "^7.2.1",
     "mysql2": "^3.15.2",
     "prisma": "^6.19.3",
     "supertest": "^7.2.2",
-    "testcontainers": "^12.0.4"
+    "testcontainers": "^12.0.4",
+    "unplugin-swc": "^1.5.9"
   }
 }

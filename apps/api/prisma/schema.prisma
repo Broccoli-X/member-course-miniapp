@@ -62,7 +62,7 @@ model RefreshSession {
   id              String    @id @default(uuid())
   adminUserId     String?
   memberAccountId String?
-  tokenHash       String    @db.VarChar(128)
+  tokenHash       String    @unique @db.VarChar(128)
   expiresAt       DateTime  @db.DateTime(3)
   revokedAt       DateTime? @db.DateTime(3)
   createdAt       DateTime  @default(now()) @db.DateTime(3)

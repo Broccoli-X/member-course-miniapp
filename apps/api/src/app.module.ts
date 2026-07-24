@@ -3,9 +3,10 @@ import { HealthController } from './health.controller.js';
 import { PrismaModule } from './infrastructure/prisma/prisma.module.js';
 import { TraceIdMiddleware } from './common/http/trace-id.middleware.js';
 import { IdempotencyService } from './common/idempotency/idempotency.service.js';
+import { IdentityModule } from './modules/identity/identity.module.js';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, IdentityModule],
   controllers: [HealthController],
   providers: [IdempotencyService],
 })
