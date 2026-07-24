@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { HourLedgerService } from './application/hour-ledger.service.js';
 import { HourExpirationService } from './application/hour-expiration.service.js';
+import { MemberAssetQueryService } from './application/member-asset-query.service.js';
 import { HourLockRepository } from './infrastructure/hour-lock.repository.js';
 import { HourExpirationJob } from './infrastructure/hour-expiration.job.js';
 import { HourAdminController } from './presentation/admin/hour-admin.controller.js';
+import { MemberAssetAdminController } from './presentation/admin/member-asset-admin.controller.js';
+import { MemberAssetMiniController } from './presentation/mini/member-asset-mini.controller.js';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
 import { IdentityModule } from '../identity/identity.module.js';
 
@@ -34,14 +37,15 @@ import { IdentityModule } from '../identity/identity.module.js';
  */
 @Module({
   imports: [IdentityModule],
-  controllers: [HourAdminController],
+  controllers: [HourAdminController, MemberAssetMiniController, MemberAssetAdminController],
   providers: [
     HourLedgerService,
     HourExpirationService,
+    MemberAssetQueryService,
     HourLockRepository,
     HourExpirationJob,
     IdempotencyService,
   ],
-  exports: [HourLedgerService, HourLockRepository],
+  exports: [HourLedgerService, HourLockRepository, MemberAssetQueryService],
 })
 export class HoursModule {}

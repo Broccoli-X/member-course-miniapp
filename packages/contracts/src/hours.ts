@@ -197,3 +197,84 @@ export interface ExpireBatchResult {
   processed: number;
   failed: number;
 }
+
+// ── Task 11: read-only member asset views ───────────────────────────────
+
+/**
+ * Serializable view of one `StudentCourseBalance` row. All four buckets are
+ * rendered as canonical 2-dp decimal strings (e.g. `"2.00"`). Returned by the
+ * mini `GET /api/mini/v1/students/:studentId/course-balances` route and the
+ * admin counterpart.
+ */
+export interface CourseBalanceView {
+  readonly id: string;
+  readonly studentId: string;
+  readonly courseId: string;
+  readonly available: DecimalString;
+  readonly reserved: DecimalString;
+  readonly consumed: DecimalString;
+  readonly expired: DecimalString;
+}
+
+/**
+ * Serializable view of one `CoursePackage` row. The four numeric buckets and
+ * the granted total are 2-dp decimal strings. `startsOn`/`expiresOn` are the
+ * package's `@db.Date` columns rendered as `YYYY-MM-DD`. `sourceType` is the
+ * raw column value (`ORDER` | `MANUAL` | ...).
+ */
+export interface CoursePackageView {
+  readonly id: string;
+  readonly studentId: string;
+  readonly courseId: string;
+  readonly sourceType: string;
+  readonly status: string;
+  /** `YYYY-MM-DD` (the package's `startsOn @db.Date`). */
+  readonly startsOn: string;
+  /** `YYYY-MM-DD` (the package's `expiresOn @db.Date`). */
+  readonly expiresOn: string;
+  readonly granted: DecimalString;
+  readonly available: DecimalString;
+  readonly reserved: DecimalString;
+  readonly consumed: DecimalString;
+  readonly expired: DecimalString;
+}
+
+/**
+ * Serializable view of one `HourAllocation` row nested under its parent
+ * `HourTransaction` in {@link HourTransactionView.allocations}. The four delta
+ * fields are 2-dp decimal strings; `sourceType` is the raw column value.
+ */
+export interface HourAllocationView {
+  readonly id: string;
+  readonly transactionId: string;
+  readonly packageId: string;
+  readonly sourceType: string;
+  readonly sourceId: string;
+  readonly availableDelta: DecimalString;
+  readonly reservedDelta: DecimalString;
+  readonly consumedDelta: DecimalString;
+  readonly expiredDelta: DecimalString;
+}
+
+/**
+ * Serializable view of one `HourTransaction` row WITH its nested
+ * `HourAllocation` rows. The four delta fields are 2-dp decimal strings.
+ * `occurredAt` (a `DateTime`) is rendered as an ISO 8601 string.
+ * `originalTransactionId` is the reversal link (null on non-reversal rows).
+ */
+export interface HourTransactionView {
+  readonly id: string;
+  readonly studentId: string;
+  readonly courseId: string;
+  readonly type: string;
+  readonly businessKey: string;
+  readonly originalTransactionId: string | null;
+  readonly availableDelta: DecimalString;
+  readonly reservedDelta: DecimalString;
+  readonly consumedDelta: DecimalString;
+  readonly expiredDelta: DecimalString;
+  readonly reason: string | null;
+  /** ISO 8601 timestamp of when the transaction took effect. */
+  readonly occurredAt: string;
+  readonly allocations: ReadonlyArray<HourAllocationView>;
+}

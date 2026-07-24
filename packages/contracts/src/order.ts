@@ -111,3 +111,44 @@ export interface VoidDraftResult {
   /** The id of the order that was voided. */
   readonly orderId: string;
 }
+
+// ── Task 11: read-only member order views ───────────────────────────────
+
+/**
+ * Serializable representation of one order item FOR THE MINI PROGRAM surface
+ * (Task 11). Mirrors {@link OfflineOrderItemDto} but only carries the fields a
+ * member needs to see (the mini client never edits, so the snapshot is the
+ * whole story). Decimal fields are 2-dp strings.
+ */
+export interface MiniOrderItemView {
+  readonly id: string;
+  readonly orderId: string;
+  readonly studentId: string;
+  readonly productId: string;
+  readonly courseId: string;
+  readonly productNameSnapshot: string;
+  readonly unitPriceSnapshot: string;
+  readonly hoursSnapshot: string;
+  readonly validDaysSnapshot: number;
+  /** The CoursePackage created at confirm time, or null before confirmation. */
+  readonly coursePackageId: string | null;
+  /** The GRANT HourTransaction id recorded at confirm time, or null. */
+  readonly grantTransactionId: string | null;
+}
+
+/**
+ * Serializable representation of an offline order FOR THE MINI PROGRAM surface
+ * (Task 11). The member only ever sees their OWN orders
+ * (`buyerAccountId === memberAccountId`); the `buyerAccountId` is included so
+ * the client can echo it. Decimal fields are 2-dp strings.
+ */
+export interface MiniOrderView {
+  readonly id: string;
+  readonly buyerAccountId: string;
+  readonly status: string;
+  /** Total = Σ item.unitPriceSnapshot, as a 2-dp decimal string. */
+  readonly totalAmount: string;
+  /** ISO timestamp of confirmation, or null. */
+  readonly confirmedAt: string | null;
+  readonly items: ReadonlyArray<MiniOrderItemView>;
+}

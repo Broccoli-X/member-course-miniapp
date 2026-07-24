@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  type MiniOrderItemView,
+  type MiniOrderView,
   type OfflineOrderDto,
   type OfflineOrderItemDto,
   type OfflineOrderStatus,
@@ -67,6 +69,55 @@ export class OfflineOrderQueryService {
       throw BusinessError.notFound('Order not found', { orderId });
     }
     return toOrderDto(row);
+  }
+
+  // ── Mini-program (member) buyer-scoped reads (Task 11) ─────────────────
+
+  /**
+   * Paginated order list scoped to a single buyer (`buyerAccountId`). This is
+   * the backing query for `GET /api/mini/v1/orders` — the member sees ONLY
+   * their own orders (buyer isolation). Ordered newest-first.
+   */
+  async listForBuyer(
+    buyerAccountId: string,
+    params: PaginationParams,
+  ): Promise<PaginatedResult<MiniOrderView>> {
+    const where = { buyerAccountId };
+    const [total, rows] = await Promise.all([
+      this.db.offlineOrder.count({ where }),
+      this.db.offlineOrder.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (params.page - 1) * params.pageSize,
+        take: params.pageSize,
+        include: { items: { include: ITEM_INCLUDE, orderBy: { createdAt: 'asc' } } },
+      }),
+    ]);
+    return {
+      items: rows.map(toMiniOrderView),
+      total,
+      page: params.page,
+      pageSize: params.pageSize,
+      totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+    };
+  }
+
+  /**
+   * Detail of one order for the mini surface, scoped to `buyerAccountId`. A
+   * row that belongs to a DIFFERENT buyer is treated identically to a missing
+   * row (404 RESOURCE_NOT_FOUND) — this deliberately does NOT leak existence of
+   * another member's order id (the brief leaves 403-vs-404 open; 404 for both
+   * is chosen to avoid an enumeration side-channel). See task-11-report.md.
+   */
+  async detailForBuyer(orderId: string, buyerAccountId: string): Promise<MiniOrderView> {
+    const row = await this.db.offlineOrder.findUnique({
+      where: { id: orderId },
+      include: { items: { include: ITEM_INCLUDE, orderBy: { createdAt: 'asc' } } },
+    });
+    if (!row || row.buyerAccountId !== buyerAccountId) {
+      throw BusinessError.notFound('Order not found', { orderId });
+    }
+    return toMiniOrderView(row);
   }
 }
 
@@ -144,5 +195,54 @@ export function toItemDto(
     coursePackageId,
     grantTransactionId,
     version: item.version,
+  };
+}
+
+// ── Mini-program (member) view mappers (Task 11) ──────────────────────────
+
+/**
+ * Convert an order item (with its optional `coursePackage` relation) to the
+ * mini {@link MiniOrderItemView}. Same fields as the admin item view minus the
+ * internal `version` (the mini client never needs optimistic-lock info).
+ */
+export function toMiniItemView(
+  item: Prisma.OrderItemGetPayload<{
+    include?: { coursePackage?: true };
+  }> & { coursePackage?: { id: string; allocations?: { transactionId: string }[] } | null },
+): MiniOrderItemView {
+  let coursePackageId: string | null = null;
+  let grantTransactionId: string | null = null;
+  if (item.coursePackage) {
+    coursePackageId = item.coursePackage.id;
+    grantTransactionId = item.coursePackage.allocations?.[0]?.transactionId ?? null;
+  }
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    studentId: item.studentId,
+    productId: item.productId,
+    courseId: item.courseId,
+    productNameSnapshot: item.productNameSnapshot,
+    unitPriceSnapshot: toDecimalString(item.unitPriceSnapshot) ?? '0.00',
+    hoursSnapshot: toDecimalString(item.hoursSnapshot) ?? '0.00',
+    validDaysSnapshot: item.validDaysSnapshot,
+    coursePackageId,
+    grantTransactionId,
+  };
+}
+
+/**
+ * Convert an OfflineOrder (+ items) row to the mini {@link MiniOrderView}. The
+ * member sees their own orders only; `buyerAccountId` is included so the client
+ * can echo it. Decimal fields are 2-dp strings; `confirmedAt` is ISO 8601.
+ */
+export function toMiniOrderView(row: OrderRowWithItems): MiniOrderView {
+  return {
+    id: row.id,
+    buyerAccountId: row.buyerAccountId,
+    status: row.status as OfflineOrderStatus | string,
+    totalAmount: toDecimalString(row.totalAmount) ?? '0.00',
+    confirmedAt: row.confirmedAt ? row.confirmedAt.toISOString() : null,
+    items: row.items.map(toMiniItemView),
   };
 }
