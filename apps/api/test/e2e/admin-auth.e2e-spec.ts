@@ -138,6 +138,34 @@ describe('Admin auth (e2e)', () => {
     await refreshAdmin(login.refreshToken, 401);
   });
 
+  it('serializes concurrent refreshes of one live token to one winner (real MySQL tx)', async () => {
+    if (!ctx) return;
+    // Authoritative concurrency test: two concurrent /refresh requests with
+    // the SAME live token must produce exactly one 200 (winner gets a rotated
+    // token) and one 401 (loser sees the optimistic-lock-guarded revoke and
+    // is refused). This exercises the real MySQL transaction + the
+    // `version`/`revokedAt: null` conditional updateMany.
+    const login = await loginAsAdmin();
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/admin/v1/auth/refresh')
+        .send({ refreshToken: login.refreshToken }),
+      request(app.getHttpServer())
+        .post('/api/admin/v1/auth/refresh')
+        .send({ refreshToken: login.refreshToken }),
+    ]);
+    const statuses = responses.map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 401]);
+    // The winner returned a fresh refresh token distinct from the original.
+    const ok = responses.find((r) => r.status === 200)!;
+    expect(ok.body.refreshToken).not.toBe(login.refreshToken);
+    // The DB should now hold exactly two live sessions for this admin: none.
+    const live = await db.refreshSession.count({
+      where: { adminUserId: { not: null }, revokedAt: null },
+    });
+    expect(live).toBe(1);
+  });
+
   it('revokes the session on logout and becomes idempotent', async () => {
     if (!ctx) return;
     const login = await loginAsAdmin();

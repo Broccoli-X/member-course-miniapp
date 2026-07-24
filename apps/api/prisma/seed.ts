@@ -12,22 +12,28 @@
  */
 import * as argon2 from 'argon2';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 
 /**
  * True when this file is the process entrypoint (i.e. invoked as
  * `node prisma/seed.ts` directly), as opposed to being imported by the e2e
- * test harness. Uses `import.meta.url` so the check works under both ESM and
- * `node --experimental-strip-types` (CommonJS `require.main` is unavailable
- * once the loader treats the file as an ES module).
+ * test harness.
+ *
+ * Both sides are normalised to a comparable absolute `file://` URL:
+ * `resolve(entry)` makes a relative `prisma/seed.ts` absolute against
+ * `process.cwd()` (the form Prisma passes to `node`), and `pathToFileURL`
+ * produces the `file://` form comparable to `import.meta.url`. This avoids
+ * the relative-vs-absolute / URL-vs-path mismatches that defeat a naive
+ * `entry === import.meta.url` check and would silently skip `main()`.
  */
 function isMainEntry(): boolean {
-  if (typeof process === 'undefined' || process.argv.length < 2) return false;
   const entry = process.argv[1];
+  if (!entry) return false;
   try {
-    return entry === fileURLToPath(import.meta.url);
+    return pathToFileURL(resolve(entry)).href === import.meta.url;
   } catch {
-    return entry === import.meta.url;
+    return false;
   }
 }
 

@@ -41,7 +41,7 @@ export interface AdminLoginResponse {
   readonly accessToken: string;
   /** Opaque refresh token; only its hash is persisted server-side. */
   readonly refreshToken: string;
-  /** Access-token absolute expiry in ms since epoch (for client UIs). */
+  /** Access-token lifetime in seconds (OAuth2 `expires_in` semantics). */
   readonly expiresIn: number;
   readonly admin: {
     readonly id: string;

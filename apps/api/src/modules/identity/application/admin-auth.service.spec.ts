@@ -141,6 +141,37 @@ function createMockDb(): {
       Object.assign(r, data, { updatedAt: new Date() });
       return r;
     }),
+    /**
+     * Conditional update used by the refresh-rotation optimistic-lock guard.
+     * Honors the `revokedAt` + `version` predicates in `where` so concurrent
+     * callers observe exactly one winner — mirroring the real MySQL behaviour.
+     */
+    updateMany: vi.fn(
+      async ({
+        where,
+        data,
+      }: {
+        where: { id: string; revokedAt?: Date | null; version?: number };
+        data: Omit<Partial<RefreshSessionRow>, 'version'> & {
+          version?: { increment: number };
+        };
+      }): Promise<{ count: number }> => {
+        const r = sessions.get(where.id);
+        if (!r) return { count: 0 };
+        // Predicate: id matches (already checked) + revokedAt + version guard.
+        const revokedOk =
+          where.revokedAt === undefined || r.revokedAt === where.revokedAt;
+        const versionOk = where.version === undefined || r.version === where.version;
+        if (!revokedOk || !versionOk) return { count: 0 };
+        const { version: versionOp, ...rest } = data;
+        Object.assign(r, rest, { updatedAt: new Date() });
+        // Apply the optimistic-lock version increment.
+        if (versionOp && typeof versionOp === 'object' && 'increment' in versionOp) {
+          r.version += versionOp.increment;
+        }
+        return { count: 1 };
+      },
+    ),
   };
 
   const transactionClient = {
@@ -371,6 +402,35 @@ describe('AdminAuthService', () => {
         code: 'UNAUTHORIZED',
         httpStatus: 401,
       });
+    });
+
+    it('serializes concurrent refreshes of one live token to one winner (optimistic lock)', async () => {
+      // The optimistic-lock guard (updateMany WHERE version=...) must ensure
+      // that two refresh calls presenting the same live token yield exactly
+      // one success and one 401 — the loser observes the version bump and
+      // refuses, defeating token reuse under contention.
+      await seedAdminRow(mock.admins, 'kara', 'pw-correct');
+      const login = await service.login({ username: 'kara', password: 'pw-correct' });
+
+      const results = await Promise.allSettled([
+        service.refresh(login.refreshToken),
+        service.refresh(login.refreshToken),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      // Loser gets a 401 (token-already-revoked).
+      expect(rejected[0]).toMatchObject({
+        status: 'rejected',
+        reason: { code: 'UNAUTHORIZED', httpStatus: 401 },
+      });
+      // Winner got a rotated token that differs from the original.
+      const winner = (fulfilled[0] as PromiseFulfilledResult<{
+        refreshToken: string;
+      }>).value;
+      expect(winner.refreshToken).not.toBe(login.refreshToken);
     });
   });
 

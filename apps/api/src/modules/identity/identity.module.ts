@@ -8,17 +8,40 @@ import { JwtTokenService } from './infrastructure/jwt-token.service.js';
 import { PASSWORD_HASHER, TOKEN_SERVICE } from './tokens.js';
 
 /**
+ * Resolve the JWT signing secret at module load.
+ *
+ * Fail-fast mirrors the seed-credential policy (brief: ADMIN_SEED_*
+ * absent → throw): a missing `JWT_SECRET` silently falling back to a
+ * committed value would let anyone forge admin access tokens in
+ * production. Outside `test`, an unset/empty secret throws. In `test`,
+ * an unset secret falls back to a known value so test bootstraps that do
+ * not set the var (e.g. unit tests that happen to import this module)
+ * keep working.
+ */
+const TEST_JWT_SECRET_FALLBACK = 'test-jwt-secret-fallback';
+function resolveJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret.trim().length > 0) {
+    return secret;
+  }
+  if (process.env.NODE_ENV === 'test') {
+    return TEST_JWT_SECRET_FALLBACK;
+  }
+  throw new Error('JWT_SECRET must be set');
+}
+
+/**
  * Identity feature module.
  *
  * Binds the auth-service ports to the argon2 / JWT adapters so the whole
- * feature can be imported with a single line in `AppModule`. The JWT secret is
- * read from `JWT_SECRET` at module load; an explicit dev-only fallback keeps
- * the app bootable in unit tests that override the provider.
+ * feature can be imported with a single line in `AppModule`. The JWT secret
+ * is resolved by {@link resolveJwtSecret}, which fails fast when unset
+ * outside `test` (no insecure committed default).
  */
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'dev-insecure-secret-change-me',
+      secret: resolveJwtSecret(),
       signOptions: { algorithm: 'HS256' },
     }),
   ],

@@ -165,22 +165,32 @@ export class AdminAuthService {
       throw BusinessError.unauthorized('Refresh token has expired');
     }
 
-    // Atomically rotate: revoke the old session, then issue a new one. Done in
-    // a transaction so a crash mid-rotation can't leave two live tokens.
     const adminId = session.adminUserId;
-    const accessToken = await this.tokens.signAccessToken({
-      adminUserId: adminId,
-      // Username isn't on the session row; load it lazily for the JWT payload.
-      username: (await this.db.adminUser.findUnique({ where: { id: adminId } }))?.username ?? '',
-    });
 
-    const newRefresh = await this.tokens.issueRefreshToken(adminId);
-
-    await this.db.$transaction(async (tx) => {
-      await tx.refreshSession.update({
-        where: { id: session.id },
-        data: { revokedAt: now },
+    // The authoritative rotation runs inside a transaction. The revoke is a
+    // CONDITIONAL updateMany guarded by both `revokedAt: null` and the
+    // optimistic-lock `version` — so if two concurrent refreshes present the
+    // same live token, exactly one wins (the other sees count===0 and gets a
+    // 401). The pre-transaction findUnique above only short-circuits unknown
+    // tokens; the updateMany here is what enforces "rotates on every use"
+    // under contention.
+    return this.db.$transaction(async (tx) => {
+      const revoked = await tx.refreshSession.updateMany({
+        where: { id: session.id, revokedAt: null, version: session.version },
+        data: { revokedAt: now, version: { increment: 1 } },
       });
+      if (revoked.count === 0) {
+        // Another caller already revoked the session → reuse detected.
+        throw BusinessError.unauthorized('Refresh token has been revoked');
+      }
+
+      const accessToken = await this.tokens.signAccessToken({
+        adminUserId: adminId,
+        // Username isn't on the session row; load it lazily for the JWT payload.
+        username: (await tx.adminUser.findUnique({ where: { id: adminId } }))?.username ?? '',
+      });
+
+      const newRefresh = await this.tokens.issueRefreshToken(adminId);
       await tx.refreshSession.create({
         data: {
           adminUserId: adminId,
@@ -188,13 +198,13 @@ export class AdminAuthService {
           expiresAt: newRefresh.expiresAt,
         },
       });
-    });
 
-    return {
-      accessToken,
-      refreshToken: newRefresh.token,
-      expiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
-    };
+      return {
+        accessToken,
+        refreshToken: newRefresh.token,
+        expiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
+      };
+    });
   }
 
   // ── Logout ─────────────────────────────────────────────────────────────
