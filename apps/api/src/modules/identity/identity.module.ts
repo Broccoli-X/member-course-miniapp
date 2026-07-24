@@ -11,6 +11,13 @@ import { PhoneBindingService } from './application/phone-binding.service.js';
 import { MiniAuthController } from './presentation/mini/mini-auth.controller.js';
 import { MiniAuthGuard } from './presentation/mini/mini-auth.guard.js';
 import { BoundMemberGuard } from './presentation/mini/bound-member.guard.js';
+import { MemberAdminService } from './application/member-admin.service.js';
+import { MemberAdminQueryService } from './application/member-admin-query.service.js';
+import { StudentProfileService } from './application/student-profile.service.js';
+import { AccountStudentRelationService } from './application/account-student-relation.service.js';
+import { StudentAccessService } from './application/student-access.service.js';
+import { MemberAdminController } from './presentation/admin/member-admin.controller.js';
+import { MemberMiniController } from './presentation/mini/member-mini.controller.js';
 import { PASSWORD_HASHER, TOKEN_SERVICE, WECHAT_GATEWAY } from './tokens.js';
 
 /**
@@ -56,7 +63,12 @@ function resolveJwtSecret(): string {
       signOptions: { algorithm: 'HS256' },
     }),
   ],
-  controllers: [AdminAuthController, MiniAuthController],
+  controllers: [
+    AdminAuthController,
+    MiniAuthController,
+    MemberAdminController,
+    MemberMiniController,
+  ],
   providers: [
     AdminAuthService,
     AdminAuthGuard,
@@ -64,10 +76,21 @@ function resolveJwtSecret(): string {
     PhoneBindingService,
     MiniAuthGuard,
     BoundMemberGuard,
+    MemberAdminService,
+    MemberAdminQueryService,
+    StudentProfileService,
+    AccountStudentRelationService,
+    StudentAccessService,
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: WECHAT_GATEWAY, useClass: WechatHttpGateway },
   ],
-  exports: [AdminAuthService, AdminAuthGuard, WechatAuthService, PhoneBindingService],
+  exports: [
+    AdminAuthService,
+    AdminAuthGuard,
+    WechatAuthService,
+    PhoneBindingService,
+    StudentAccessService,
+  ],
 })
 export class IdentityModule {}
