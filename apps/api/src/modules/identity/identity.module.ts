@@ -86,8 +86,11 @@ function resolveJwtSecret(): string {
     { provide: WECHAT_GATEWAY, useClass: WechatHttpGateway },
   ],
   exports: [
+    JwtModule,
     AdminAuthService,
     AdminAuthGuard,
+    MiniAuthGuard,
+    BoundMemberGuard,
     WechatAuthService,
     PhoneBindingService,
     StudentAccessService,

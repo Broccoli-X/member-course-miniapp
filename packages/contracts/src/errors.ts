@@ -24,6 +24,23 @@ export const ERROR_CODES = {
    * from {@link STATE_CHANGED} so callers can surface a specific message.
    */
   PHONE_BINDING_CONFLICT: 'PHONE_BINDING_CONFLICT',
+  /**
+   * Raised when a money/hours decimal string carries more than two fractional
+   * digits (e.g. `'100.001'`). Catalog package-product validation maps this to
+   * HTTP 422 — the schema stores `Decimal(10,2)`, so extra scale would be
+   * silently truncated on write; reject it up-front instead.
+   */
+  DECIMAL_SCALE_INVALID: 'DECIMAL_SCALE_INVALID',
+  /**
+   * Raised when a package product's `hours` field is not strictly positive
+   * (e.g. `'0.00'`). Hours represent lesson quantity and must be > 0.
+   */
+  HOURS_MUST_BE_POSITIVE: 'HOURS_MUST_BE_POSITIVE',
+  /**
+   * Raised when a package product's `validDays` field is not a positive
+   * integer (e.g. `0`). Valid days represent an expiry duration and must be > 0.
+   */
+  VALID_DAYS_INVALID: 'VALID_DAYS_INVALID',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
@@ -33,6 +50,7 @@ export const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
   INTERNAL_ERROR: 500,
 } as const;
