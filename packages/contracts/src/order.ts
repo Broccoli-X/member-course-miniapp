@@ -90,3 +90,24 @@ export interface ReverseOfflineOrderCommand {
   /** Optional human-readable reason recorded on the reversal posting(s). */
   readonly reason?: string;
 }
+
+/**
+ * Result of `POST /api/admin/v1/orders/:id/void`. A serializable marker body
+ * returned by `OfflineOrderService.voidDraft`.
+ *
+ * Why this exists: a PENDING draft has no VOIDED status — voiding physically
+ * removes the row, so there is no `OfflineOrderDto` to return. But the void
+ * must be replayable through `IdempotencyService`: a client retry after a
+ * network blip must get the SAME 200 response as the first call. The
+ * idempotency layer only replays responses whose `responseBody` is non-null,
+ * so voiding returns this small non-null JSON marker (instead of `undefined`,
+ * which serializes to NULL and breaks replay — a second same-key void would
+ * otherwise re-run the work and hit a 404 because the order was already
+ * deleted).
+ */
+export interface VoidDraftResult {
+  /** Literal marker: always `true`. */
+  readonly voided: true;
+  /** The id of the order that was voided. */
+  readonly orderId: string;
+}

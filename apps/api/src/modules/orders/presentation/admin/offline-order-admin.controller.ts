@@ -18,6 +18,7 @@ import {
   type CreateOfflineOrderCommand,
   type OfflineOrderDto,
   type PaginatedResult,
+  type VoidDraftResult,
 } from '@member-course/contracts';
 import { AdminAuthGuard } from '../../../identity/presentation/admin/admin-auth.guard.js';
 import { OfflineOrderService } from '../../application/offline-order.service.js';
@@ -124,9 +125,8 @@ export class OfflineOrderAdminController {
     @Param('id') id: string,
     @Req() req: Request,
     @Headers('idempotency-key') idempotencyKey?: string,
-  ): Promise<{ voided: true }> {
-    await this.command.voidDraft(id, contextFrom(req, idempotencyKey, 'void'));
-    return { voided: true };
+  ): Promise<VoidDraftResult> {
+    return this.command.voidDraft(id, contextFrom(req, idempotencyKey, 'void'));
   }
 
   // ── Reverse ─────────────────────────────────────────────────────────────

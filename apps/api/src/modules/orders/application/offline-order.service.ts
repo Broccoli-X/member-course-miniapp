@@ -9,6 +9,7 @@ import {
   type CreateOfflineOrderCommand,
   type OfflineOrderDto,
   type ReverseOfflineOrderCommand,
+  type VoidDraftResult,
 } from '@member-course/contracts';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service.js';
 import { BusinessError } from '../../../common/errors/business-error.js';
@@ -196,16 +197,38 @@ export class OfflineOrderService {
     tx: Prisma.TransactionClient,
     orderId: string,
   ): Promise<OfflineOrderDto> {
-    // Lock the order row for the duration of the confirm so a concurrent
-    // confirm/void/reverse can't race the status check + flip.
+    // Acquire a record lock on the order row FOR UPDATE as the FIRST statement
+    // in the tx, reading the CURRENT (latest committed) status. The order
+    // always EXISTS when being confirmed (created at draft), so InnoDB takes a
+    // RECORD lock (not a gap lock) — this cannot deadlock with other ops on
+    // existing rows. This serializes two operations on the SAME order that
+    // carry DIFFERENT idempotency keys (e.g. confirm key-A + void key-B fired
+    // concurrently): IdempotencyService only dedups the SAME-key case, so
+    // without this lock both would read PENDING under RR and race. The lock
+    // makes the second wait until the first tx commits; the locking read then
+    // observes the winner's new status and the state-machine guard rejects the
+    // transition.
+    //
+    // We MUST assert against the value from the locking read (current data),
+    // NOT a subsequent plain findUnique: under MySQL REPEATABLE READ a
+    // non-locking read uses the trx snapshot, which can still hold the stale
+    // pre-winner status and would let the loser's guard pass.
+    const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM \`offline_order\` WHERE id = ${orderId} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw BusinessError.notFound('Order not found', { orderId });
+    }
+    assertCanConfirm(locked[0]!.status);
+
     const order = await tx.offlineOrder.findUnique({
       where: { id: orderId },
       include: { items: { orderBy: { createdAt: 'asc' } } },
     });
     if (!order) {
+      // Should be unreachable given the lock above; guard anyway.
       throw BusinessError.notFound('Order not found', { orderId });
     }
-    assertCanConfirm(order.status);
 
     const confirmedAt = new Date();
     // Shanghai-local confirm date for startsOn (a @db.Date — stored without TZ,
@@ -283,21 +306,44 @@ export class OfflineOrderService {
    * Void a PENDING draft. The schema has no VOIDED status, and a draft has no
    * packages/grants, so voiding removes the draft and its items. Idempotent on
    * `context.idempotencyKey`. CONFIRMED/REVERSED orders are rejected.
+   *
+   * Returns a serializable {@link VoidDraftResult} (not `void`) so the result
+   * is non-null JSON in the idempotency record — that is what makes a client
+   * retry (same key, after the row is already deleted) replay the cached 200
+   * instead of re-running the work and hitting a 404.
    */
-  async voidDraft(orderId: string, context: CommandContext): Promise<void> {
+  async voidDraft(orderId: string, context: CommandContext): Promise<VoidDraftResult> {
     const request: IdempotentRequest = {
       scope: 'order-void',
       actorId: context.actorId,
       key: context.idempotencyKey,
       requestHash: stableHash({ orderId, intent: 'void' }),
     };
-    await this.idempotency.execute(request, (tx) => this.voidInTx(tx, orderId));
+    return this.idempotency.execute<VoidDraftResult>(request, (tx) =>
+      this.voidInTx(tx, orderId),
+    );
   }
 
   private async voidInTx(
     tx: Prisma.TransactionClient,
     orderId: string,
-  ): Promise<void> {
+  ): Promise<VoidDraftResult> {
+    // Lock the order row FOR UPDATE (record lock — the order always EXISTS
+    // when being voided, so InnoDB takes a record lock, not a gap lock, and
+    // cannot deadlock with other operations on existing rows). This is the
+    // FIRST statement in the tx so that two operations on the same order with
+    // DIFFERENT idempotency keys (e.g. confirm key-A + void key-B) serialize
+    // regardless of the in-process IdempotencyService dedup, which only covers
+    // the SAME-key case. The status read here is CURRENT data; assert against
+    // it (NOT a subsequent snapshot read) — see confirmInTx.
+    const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM \`offline_order\` WHERE id = ${orderId} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw BusinessError.notFound('Order not found', { orderId });
+    }
+    assertCanVoid(locked[0]!.status);
+
     const order = await tx.offlineOrder.findUnique({
       where: { id: orderId },
       include: { items: true },
@@ -305,13 +351,16 @@ export class OfflineOrderService {
     if (!order) {
       throw BusinessError.notFound('Order not found', { orderId });
     }
-    assertCanVoid(order.status);
 
     // A PENDING draft has no CoursePackages (they're created at confirm), so
     // deleting its items is safe (no CoursePackage.sourceOrderItemId references
     // them). Remove items first, then the order, to satisfy onDelete: Restrict.
     await tx.orderItem.deleteMany({ where: { orderId } });
     await tx.offlineOrder.delete({ where: { id: orderId } });
+
+    // Non-null serializable marker so idempotent replay returns the cached 200
+    // rather than re-running against an already-deleted row (which would 404).
+    return { voided: true, orderId };
   }
 
   // ── reverse ────────────────────────────────────────────────────────────
@@ -345,6 +394,19 @@ export class OfflineOrderService {
     orderId: string,
     reason: string,
   ): Promise<OfflineOrderDto> {
+    // Acquire a record lock on the order row FOR UPDATE as the FIRST statement
+    // in the tx (record lock — the order always EXISTS when being reversed).
+    // Serializes same-order operations that carry DIFFERENT idempotency keys;
+    // see {@link confirmInTx} for the rationale. Assert against the CURRENT
+    // status from this locking read (NOT a snapshot read).
+    const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM \`offline_order\` WHERE id = ${orderId} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw BusinessError.notFound('Order not found', { orderId });
+    }
+    assertCanReverse(locked[0]!.status);
+
     const order = await tx.offlineOrder.findUnique({
       where: { id: orderId },
       include: { items: { orderBy: { createdAt: 'asc' } } },
@@ -352,7 +414,6 @@ export class OfflineOrderService {
     if (!order) {
       throw BusinessError.notFound('Order not found', { orderId });
     }
-    assertCanReverse(order.status);
 
     const occurredAt = new Date();
 

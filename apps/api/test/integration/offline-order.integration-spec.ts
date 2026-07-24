@@ -8,6 +8,7 @@ import { HourLedgerService } from '../../src/modules/hours/application/hour-ledg
 import { HourLockRepository } from '../../src/modules/hours/infrastructure/hour-lock.repository.js';
 import { OfflineOrderService } from '../../src/modules/orders/application/offline-order.service.js';
 import { OfflineOrderQueryService } from '../../src/modules/orders/application/offline-order-query.service.js';
+import { BusinessError } from '../../src/common/errors/business-error.js';
 import {
   OFFLINE_ORDER_STATUS,
   type CommandContext,
@@ -474,6 +475,108 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       // expiresOn is Shanghai-confirm-date + 29 days (inclusive validDays=30).
       const expectedExpires = expiryForRange(before, after, 29);
       expect(pkg!.expiresOn.toISOString()).toBe(expectedExpires);
+    });
+
+    // ── Idempotent void replay: same key twice → BOTH 200 with equal bodies ─
+    //
+    // The bug being guarded against: void returned `void`, so
+    // IdempotencyService wrote NULL to responseBody. A client retry (same key,
+    // after the row was deleted) then failed the replay fast-path and re-ran
+    // the work, whose findUnique returned null → 404. With a serializable
+    // VoidDraftResult the cached response is non-null JSON, so the SECOND call
+    // replays it instead of re-running — both calls return 200 with the same
+    // {voided:true, orderId}. This is the documented idempotency contract.
+    it('is idempotent on void: same key twice returns 200 both times with equal bodies', async () => {
+      if (!ctx) return;
+      const { accountId, studentId, productId } = await seedCatalog();
+      const draft = await createDraftFromProduct(productId, studentId, accountId);
+
+      // First void deletes the order. SEQUENTIAL — the second is a true replay
+      // against an already-deleted row, not a concurrent in-flight dedup.
+      const first = await orders.voidDraft(draft.id, adminContext('void-replay'));
+      // The second call carries the SAME key. Before the fix this threw
+      // RESOURCE_NOT_FOUND (the order was gone); now it replays the cached
+      // marker → same body, 200-equivalent (no throw).
+      const second = await orders.voidDraft(draft.id, adminContext('void-replay'));
+
+      expect(first).toEqual({ voided: true, orderId: draft.id });
+      expect(second).toEqual(first);
+      // Order + items remain gone (the replay did NOT re-run any work).
+      await expect(db.offlineOrder.findUnique({ where: { id: draft.id } })).resolves.toBeNull();
+      expect(await db.orderItem.count()).toBe(0);
+      // No idempotency-record re-execution left packages or grants behind.
+      expect(await packageCountForOrder(draft.id)).toBe(0);
+      expect(await grantCountForOrder(draft.id)).toBe(0);
+    });
+
+    // ── Different-key concurrency on the SAME order: exactly one wins ───────
+    //
+    // IdempotencyService only serializes the SAME-key case. Two operations on
+    // the same order with DIFFERENT keys (confirm key-A + void key-B) would
+    // otherwise both read PENDING under RR and race. The SELECT ... FOR UPDATE
+    // record lock at the top of each *InTx serializes them: one completes, the
+    // other re-reads the updated status and its state-machine guard rejects it
+    // with a clean BusinessError (STATE_CHANGED), never a 500 / FK error. We
+    // assert the disjunction: exactly one transition wins and the other fails
+    // cleanly, with no partial state (no orphan packages/grants for a voided
+    // order; no double-transition).
+    it('serializes a different-key confirm + void on the same order (exactly one wins, no partial state)', async () => {
+      if (!ctx) return;
+      const { accountId, studentId, productId } = await seedCatalog();
+      const draft = await createDraftFromProduct(productId, studentId, accountId);
+
+      // Fire confirm (key-A) and void (key-B) CONCURRENTLY on the same order.
+      const confirmP = confirmOrder(draft.id, 'concurrent-confirm').then(
+        (dto) => ({ ok: true as const, dto }),
+        (err: unknown) => ({ ok: false as const, err }),
+      );
+      const voidP = orders.voidDraft(draft.id, adminContext('concurrent-void')).then(
+        (dto) => ({ ok: true as const, dto }),
+        (err: unknown) => ({ ok: false as const, err }),
+      );
+      const [confirmResult, voidResult] = await Promise.all([confirmP, voidP]);
+
+      // Exactly one wins.
+      expect(confirmResult.ok === voidResult.ok).toBe(false);
+
+      // The loser fails with a CLEAN BusinessError — never a 500 or a Prisma/FK
+      // error. The exact code depends on which operation won:
+      //  - confirm won → the order is CONFIRMED, so the void loser's
+      //    assertCanVoid(CONFIRMED) throws STATE_CHANGED (409);
+      //  - void won → the order row is DELETED, so the confirm loser's
+      //    SELECT ... FOR UPDATE finds nothing → RESOURCE_NOT_FOUND (404).
+      // Both are clean client errors; that is the contract being verified (the
+      // pre-fix race would produce a 500 / FK fallout or a double-transition).
+      const loser = confirmResult.ok ? voidResult : confirmResult;
+      expect(loser.ok).toBe(false);
+      const loserErr = (loser as { ok: false; err: unknown }).err;
+      // Surface a non-BusinessError for diagnosis during the fix; the contract
+      // is that the loser is ALWAYS a clean BusinessError (< 500).
+      if (!(loserErr instanceof BusinessError)) {
+        throw new Error(
+          `loser was not a clean BusinessError; got: ${loserErr instanceof Error ? `${loserErr.name}: ${loserErr.message}` : String(loserErr)}`,
+        );
+      }
+      const code = loserErr.code;
+      const httpStatus = loserErr.httpStatus;
+      expect(['STATE_CHANGED', 'RESOURCE_NOT_FOUND']).toContain(code);
+      expect([409, 404]).toContain(httpStatus);
+      // Explicitly NOT a server error.
+      expect(httpStatus).toBeLessThan(500);
+
+      // No partial state: if confirm won, the order is CONFIRMED with exactly
+      // one package + one grant; if void won, the order + items are gone and
+      // there are zero packages + zero grants.
+      if (confirmResult.ok) {
+        expect(await orderStatus(draft.id)).toBe(OFFLINE_ORDER_STATUS.CONFIRMED);
+        expect(await packageCountForOrder(draft.id)).toBe(1);
+        expect(await grantCountForOrder(draft.id)).toBe(1);
+      } else {
+        await expect(db.offlineOrder.findUnique({ where: { id: draft.id } })).resolves.toBeNull();
+        expect(await db.orderItem.count()).toBe(0);
+        expect(await packageCountForOrder(draft.id)).toBe(0);
+        expect(await grantCountForOrder(draft.id)).toBe(0);
+      }
     });
   },
 );
