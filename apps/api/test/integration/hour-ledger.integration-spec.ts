@@ -431,6 +431,49 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       expect(await sumAvailableTransactionDeltas('stu-1', 'crs-1')).toBe('0.00');
     });
 
+    // ── Reversal persists originalTransactionId; grant row has null ──────
+
+    it('persists originalTransactionId on the REVERSAL row (and null on the grant)', async () => {
+      if (!ctx) return;
+      await seedStudentCourseOrder();
+      const grant = await grantInTx(orderGrantInput({ units: '6.00' }));
+
+      // The GRANT row has no original (the column is NULL for non-reversal
+      // types).
+      const grantRow = await db.hourTransaction.findUnique({
+        where: { id: grant.transactionId },
+        select: { originalTransactionId: true, type: true },
+      });
+      expect(grantRow!.type).toBe(HOUR_TRANSACTION_TYPE.GRANT);
+      expect(grantRow!.originalTransactionId).toBeNull();
+
+      const reversal = await reverseInTx({
+        orderId: 'ord-1',
+        orderItemId: 'oi-1',
+        originalTransactionId: grant.transactionId,
+        occurredAt: new Date('2026-07-21T00:00:00.000Z'),
+        businessKey: 'order-reverse:oi-1:link',
+        reason: 'audit-link',
+      });
+
+      // The REVERSAL row carries the auditable link back to the grant: given
+      // just the reversal row you can query which grant it undid, without
+      // parsing businessKey/reason text.
+      const reversalRow = await db.hourTransaction.findUnique({
+        where: { id: reversal.transactionId },
+        select: { originalTransactionId: true, type: true },
+      });
+      expect(reversalRow!.type).toBe(HOUR_TRANSACTION_TYPE.REVERSAL);
+      expect(reversalRow!.originalTransactionId).toBe(grant.transactionId);
+
+      // The link is queryable: "find all reversals of this grant".
+      const reversalsOfGrant = await db.hourTransaction.findMany({
+        where: { originalTransactionId: grant.transactionId },
+      });
+      expect(reversalsOfGrant).toHaveLength(1);
+      expect(reversalsOfGrant[0]!.id).toBe(reversal.transactionId);
+    });
+
     // ── Concurrency: two distinct businessKeys both succeed ─────────────
 
     it('serializes two concurrent grants with distinct businessKeys (both land, balance reconciles)', async () => {

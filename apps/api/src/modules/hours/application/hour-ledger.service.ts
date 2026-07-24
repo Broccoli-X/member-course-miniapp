@@ -252,6 +252,11 @@ export class HourLedgerService {
       businessKey: input.businessKey,
       occurredAt: input.occurredAt,
       reason: input.reason,
+      // Persist the auditability link: this REVERSAL row points back to the
+      // transaction it undoes. The link was already validated above (the
+      // original exists and is a reversible type). Non-reversal postings
+      // (grantOrder) leave this unset → NULL on the row.
+      originalTransactionId: input.originalTransactionId,
       balance,
       txDeltas,
       allocations,
@@ -281,6 +286,13 @@ export class HourLedgerService {
       businessKey: string;
       occurredAt: Date;
       reason: string | null;
+      /**
+       * For a REVERSAL, the id of the original transaction being undone.
+       * Undefined/omitted for non-reversal postings (GRANT leaves the column
+       * NULL). Persisted to `HourTransaction.originalTransactionId` so a
+       * reversal row carries an auditable link to its source.
+       */
+      originalTransactionId?: string;
       balance: LockedBalance;
       txDeltas: Buckets;
       allocations: Array<{
@@ -311,6 +323,12 @@ export class HourLedgerService {
           expiredDelta: args.txDeltas.expired,
           reason: args.reason,
           occurredAt: args.occurredAt,
+          // Only set when explicitly provided (REVERSAL). Omitting the field
+          // for GRANT/etc. writes NULL — do NOT pass `undefined` explicitly
+          // through Prisma, which treats an absent key the same as NULL here.
+          ...(args.originalTransactionId !== undefined
+            ? { originalTransactionId: args.originalTransactionId }
+            : {}),
         },
       });
       transactionId = created.id;

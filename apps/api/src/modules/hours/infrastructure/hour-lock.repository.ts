@@ -238,20 +238,14 @@ export class HourLockRepository {
 }
 
 /**
- * Generate a v4-style random uuid for the balance create-or-touch INSERT.
- * `crypto.randomUUID()` is available on Node 19+ (we run on Node 22+); fall
- * back to a manual hex build for older runtimes just in case.
+ * Generate a v4 uuid for the balance create-or-touch INSERT.
+ * `crypto.randomUUID()` is always available on Node 19+ (we run on Node 22+).
+ * If it is somehow missing the runtime is misconfigured and producing weaker
+ * IDs silently would be worse than failing loudly — this is an accounting
+ * path, so throw instead of falling back to a manual `Math.random()` build.
  */
 function cryptoRandomId(): string {
   const c = globalThis.crypto as Crypto | undefined;
   if (c && typeof c.randomUUID === 'function') return c.randomUUID();
-  // Defensive fallback (not expected to fire on Node 22). 32 hex chars.
-  const bytes = new Uint8Array(16);
-  if (c) {
-    c.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  throw new Error('crypto.randomUUID is not available');
 }

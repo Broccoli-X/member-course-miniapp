@@ -245,6 +245,11 @@ model HourTransaction {
   courseId              String
   type                  String   @db.VarChar(30) // GRANT | DEBIT | MANUAL_GRANT | MANUAL_DEDUCT | REVERSAL
   businessKey           String   @unique @db.VarChar(200)
+  // For a REVERSAL row, the id of the GRANT/DEBIT/MANUAL_* transaction this
+  // reversal undoes. NULL for non-reversal types. Plain index (NOT a self-FK) —
+  // the ledger is append-only, so we never cascade-delete; the link is for
+  // auditability ("find all reversals of grant X").
+  originalTransactionId String?
   availableDelta        Decimal  @db.Decimal(10, 2)
   reservedDelta         Decimal  @db.Decimal(10, 2)
   consumedDelta         Decimal  @db.Decimal(10, 2)
@@ -257,6 +262,7 @@ model HourTransaction {
   course      Course            @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   allocations HourAllocation[]
 
+  @@index([originalTransactionId])
   @@map("hour_transaction")
 }
 
