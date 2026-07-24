@@ -5,7 +5,13 @@ import { AdminAuthGuard } from './presentation/admin/admin-auth.guard.js';
 import { AdminAuthService } from './application/admin-auth.service.js';
 import { Argon2PasswordHasher } from './infrastructure/argon2-password-hasher.js';
 import { JwtTokenService } from './infrastructure/jwt-token.service.js';
-import { PASSWORD_HASHER, TOKEN_SERVICE } from './tokens.js';
+import { WechatHttpGateway } from './infrastructure/wechat-http.gateway.js';
+import { WechatAuthService } from './application/wechat-auth.service.js';
+import { PhoneBindingService } from './application/phone-binding.service.js';
+import { MiniAuthController } from './presentation/mini/mini-auth.controller.js';
+import { MiniAuthGuard } from './presentation/mini/mini-auth.guard.js';
+import { BoundMemberGuard } from './presentation/mini/bound-member.guard.js';
+import { PASSWORD_HASHER, TOKEN_SERVICE, WECHAT_GATEWAY } from './tokens.js';
 
 /**
  * Resolve the JWT signing secret at module load.
@@ -33,10 +39,15 @@ function resolveJwtSecret(): string {
 /**
  * Identity feature module.
  *
- * Binds the auth-service ports to the argon2 / JWT adapters so the whole
- * feature can be imported with a single line in `AppModule`. The JWT secret
- * is resolved by {@link resolveJwtSecret}, which fails fast when unset
+ * Binds the auth-service ports to the argon2 / JWT / WeChat adapters so the
+ * whole feature can be imported with a single line in `AppModule`. The JWT
+ * secret is resolved by {@link resolveJwtSecret}, which fails fast when unset
  * outside `test` (no insecure committed default).
+ *
+ * The {@link WECHAT_GATEWAY} port is bound to the real {@link WechatHttpGateway}
+ * here. Tests override this DI token with a fake gateway (see
+ * `test/doubles/fake-wechat.gateway.ts`) via
+ * `Test.createTestingModule().overrideProvider(WECHAT_GATEWAY)`.
  */
 @Module({
   imports: [
@@ -45,13 +56,18 @@ function resolveJwtSecret(): string {
       signOptions: { algorithm: 'HS256' },
     }),
   ],
-  controllers: [AdminAuthController],
+  controllers: [AdminAuthController, MiniAuthController],
   providers: [
     AdminAuthService,
     AdminAuthGuard,
+    WechatAuthService,
+    PhoneBindingService,
+    MiniAuthGuard,
+    BoundMemberGuard,
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
+    { provide: WECHAT_GATEWAY, useClass: WechatHttpGateway },
   ],
-  exports: [AdminAuthService, AdminAuthGuard],
+  exports: [AdminAuthService, AdminAuthGuard, WechatAuthService, PhoneBindingService],
 })
 export class IdentityModule {}

@@ -32,5 +32,11 @@ export default defineConfig({
     include: ['test/e2e/**/*.e2e-spec.ts'],
     testTimeout: 60000,
     hookTimeout: 60000,
+    // E2E specs share a single physical MySQL test DB; running them in
+    // parallel would have one file's beforeEach truncate another file's
+    // in-flight rows (e.g. mini-auth truncates admin_user while admin-auth's
+    // seed is live). Force files to run one at a time so each spec owns the
+    // DB for the duration of its run.
+    fileParallelism: false,
   },
 });

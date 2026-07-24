@@ -17,6 +17,13 @@ export const ERROR_CODES = {
   FORBIDDEN: 'FORBIDDEN',
   STUDENT_FORBIDDEN: 'STUDENT_FORBIDDEN',
   ADMIN_LOGIN_LOCKED: 'ADMIN_LOGIN_LOCKED',
+  /**
+   * Raised when a mini-program phone-binding transaction detects that the
+   * pre-created member account that owns the verified phone already owns a
+   * *different* WeChat identity. Mapped to HTTP 409 CONFLICT, but kept distinct
+   * from {@link STATE_CHANGED} so callers can surface a specific message.
+   */
+  PHONE_BINDING_CONFLICT: 'PHONE_BINDING_CONFLICT',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

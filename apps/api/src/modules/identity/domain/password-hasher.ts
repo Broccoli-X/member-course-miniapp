@@ -39,6 +39,18 @@ export interface VerifiedRefreshSession {
 }
 
 /**
+ * Principal shape required to sign a member access JWT. The `provisional` flag
+ * is copied into the token payload so the client can cheaply decide which
+ * surfaces to show, but it is ALWAYS re-checked server-side against the live
+ * `MemberAccount` row by {@link BoundMemberGuard} — a token cannot authorize
+ * private access merely because it was minted before binding.
+ */
+export interface MemberAccessTokenPrincipal {
+  readonly accountId: string;
+  readonly provisional: boolean;
+}
+
+/**
  * Mints access JWTs and issues/verifies opaque rotating refresh tokens.
  * Implementations are responsible for hashing refresh tokens (SHA-256) so the
  * service layer never handles the plaintext token except to echo it back to
@@ -49,11 +61,24 @@ export interface TokenService {
   signAccessToken(principal: { adminUserId: string; username: string }): Promise<string>;
 
   /**
+   * Sign a 15-minute member access JWT. The `kind: 'member'` discriminator in
+   * the payload keeps member and admin tokens distinct even when signed by the
+   * same secret, so {@link MiniAuthGuard} can reject an admin token presented
+   * to a mini endpoint (and vice-versa for {@link AdminAuthGuard}).
+   */
+  signMemberAccessToken(principal: MemberAccessTokenPrincipal): Promise<string>;
+
+  /**
    * Mint a brand-new refresh token (plaintext + hash + expiry). The caller is
    * responsible for persisting the {@link IssuedRefreshToken.tokenHash} on a
    * `RefreshSession` row.
+   *
+   * The `subjectId` is bound into the plaintext token (defence-in-depth: a
+   * stolen token can't be replayed against a different session row) and is
+   * also the value the caller stores on `RefreshSession.adminUserId` (admin
+   * flow) or `RefreshSession.memberAccountId` (member flow).
    */
-  issueRefreshToken(adminUserId: string): Promise<IssuedRefreshToken>;
+  issueRefreshToken(subjectId: string): Promise<IssuedRefreshToken>;
 
   /**
    * Hash a plaintext refresh token for lookup. Used by the service to find the

@@ -41,6 +41,12 @@ class FakeTokenService implements TokenService {
   signAccessToken = vi.fn(async (p: { adminUserId: string; username: string }) =>
     `access.${p.adminUserId}.${p.username}`,
   );
+  // Member access tokens aren't exercised by the admin-auth suite, but the
+  // interface now requires the method — provide a stub so the fake satisfies
+  // the TokenService contract for the admin service's construction.
+  signMemberAccessToken = vi.fn(async (p: { accountId: string; provisional: boolean }) =>
+    `member.${p.accountId}.${p.provisional ? 'prov' : 'bound'}`,
+  );
   issueRefreshToken = vi.fn(async (adminUserId: string) => {
     this.counter += 1;
     const token = `${PLAINTEXT_PREFIX}${adminUserId}.${this.counter}`;

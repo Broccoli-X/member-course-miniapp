@@ -7,7 +7,7 @@ import {
   createDuplicateAccountStudentRelation,
   createDuplicateIdempotencyKey,
 } from '../../helpers/m1-schema-fixtures.js';
-import { PrismaClient } from '../../src/generated/prisma/client.js';
+import { PrismaClient } from '../../../src/generated/prisma/client.js';
 
 describe.skipIf(!process.env.RUN_INTEGRATION)('M1 schema constraints', () => {
   let ctx: MysqlTestContext | null;
@@ -25,8 +25,17 @@ describe.skipIf(!process.env.RUN_INTEGRATION)('M1 schema constraints', () => {
       SELECT TABLE_NAME FROM information_schema.TABLES
       WHERE TABLE_SCHEMA = 'member_course_test'
     `;
-    for (const { TABLE_NAME } of tables) {
-      await db.$executeRawUnsafe(`TRUNCATE TABLE \`${TABLE_NAME}\``);
+    // FK checks must be disabled around the truncate loop: child tables
+    // (e.g. refresh_session) reference parent tables (admin_user/member_account)
+    // and MySQL refuses TRUNCATE on a referenced table otherwise. Mirrors the
+    // cleanup path in helpers/mysql-test-environment.ts.
+    await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
+    try {
+      for (const { TABLE_NAME } of tables) {
+        await db.$executeRawUnsafe(`TRUNCATE TABLE \`${TABLE_NAME}\``);
+      }
+    } finally {
+      await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
     }
   });
 
