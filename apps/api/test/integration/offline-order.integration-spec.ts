@@ -51,7 +51,10 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       // so IdempotencyService (which types its dep as PrismaService) is happy.
       const dbAsService = db as unknown as PrismaService;
       const idempotency = new IdempotencyService(dbAsService);
-      const ledger = new HourLedgerService(new HourLockRepository());
+      const ledger = new HourLedgerService(
+        new HourLockRepository(),
+        new IdempotencyService(dbAsService),
+      );
       orders = new OfflineOrderService(dbAsService, idempotency, ledger);
       query = new OfflineOrderQueryService(dbAsService);
     });

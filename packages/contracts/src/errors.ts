@@ -48,6 +48,16 @@ export const ERROR_CODES = {
    * reversed before any consumption. Mapped to HTTP 409 CONFLICT.
    */
   ORDER_NOT_REVERSIBLE: 'ORDER_NOT_REVERSIBLE',
+  /**
+   * Raised when a manual debit (or any draw) would make `available` negative.
+   * The balance row is locked FOR UPDATE and `available - units` is recomputed
+   * in Prisma.Decimal under the lock; if it would go below zero the debit is
+   * rejected. Mapped to HTTP 409 CONFLICT (the available balance is the
+   * conflicting state). Also covers the "two concurrent debits of the final
+   * hours" race: the second debit's locking read observes the first's commit
+   * and rejects rather than overdrawing.
+   */
+  INSUFFICIENT_HOURS: 'INSUFFICIENT_HOURS',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

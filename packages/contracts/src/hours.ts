@@ -24,6 +24,8 @@ export const HOUR_TRANSACTION_TYPE = {
   MANUAL_DEDUCT: 'MANUAL_DEDUCT',
   /** Negates a prior GRANT/DEBIT — never mutates the original. */
   REVERSAL: 'REVERSAL',
+  /** Hours moved from `available` to `expired` by the daily expiry job (Task 10). */
+  EXPIRE: 'EXPIRE',
 } as const;
 
 export type HourTransactionType =
@@ -34,6 +36,8 @@ export const HOUR_ALLOCATION_SOURCE = {
   ORDER: 'ORDER',
   MANUAL_GRANT: 'MANUAL_GRANT',
   MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT',
+  /** An expiry posting moving available→expired (Task 10 daily job). */
+  EXPIRE: 'EXPIRE',
 } as const;
 
 export type HourAllocationSource =
@@ -46,9 +50,24 @@ export const COURSE_PACKAGE_STATUS = {
   EXHAUSTED: 'EXHAUSTED',
 } as const;
 
-/** CoursePackage `sourceType` (mirrors the schema's VarChar(20)). */
+/**
+ * CoursePackage `sourceType` (mirrors the schema's VarChar(20)).
+ *
+ * NOTE on the MANUAL vs MANUAL_GRANT reconciliation: the schema comment for
+ * `CoursePackage.sourceType` lists `ORDER | MANUAL_GRANT | MANUAL_ADJUSTMENT`,
+ * but Task 10's verbatim integration test asserts
+ * `expect(await latestPackage()).toMatchObject({ sourceType: 'MANUAL', ... })`.
+ * The column is free-text `VarChar(20)` (no DB enum), so either value stores
+ * fine. Per the task instructions ("Check what the test literally asserts and
+ * make the code match it"), `grantManual` writes `sourceType: 'MANUAL'`. We
+ * keep `MANUAL_GRANT`/`MANUAL_ADJUSTMENT` in the constant union for callers
+ * that prefer the more specific labels, but the manual-grant path uses the
+ * bare `MANUAL` token to satisfy the test contract.
+ */
 export const COURSE_PACKAGE_SOURCE = {
   ORDER: 'ORDER',
+  /** Used by `grantManual` — the verbatim Task 10 test asserts this exact token. */
+  MANUAL: 'MANUAL',
   MANUAL_GRANT: 'MANUAL_GRANT',
   MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT',
 } as const;
@@ -129,4 +148,52 @@ export interface HourPostingResult {
   balanceId: string;
   allocations: HourPostingAllocation[];
   balance: HourBalanceSummary;
+}
+
+// ── Task 10: manual adjustments + daily expiration ──────────────────────
+
+/**
+ * Input to `HourLedgerService.grantManual` (Task 10). Creates a SEPARATE
+ * `CoursePackage` with `sourceType: MANUAL` and posts a `MANUAL_GRANT`
+ * HourTransaction. `startsOn`/`expiresOn` are `YYYY-MM-DD` strings (Shanghai
+ * business dates) — the service parses them to UTC-midnight Dates for the
+ * `@db.Date` columns. A nonblank `reason` is required (auditable adjustment).
+ */
+export interface ManualGrantCommand {
+  studentId: string;
+  courseId: string;
+  units: DecimalString;
+  /** `YYYY-MM-DD` Shanghai business date. */
+  startsOn: string;
+  /** `YYYY-MM-DD` Shanghai business date. */
+  expiresOn: string;
+  /** Nonblank admin-supplied reason (audited on the HourTransaction row). */
+  reason: string;
+}
+
+/**
+ * Input to `HourLedgerService.debitManual` (Task 10). Draws `units` from
+ * `available` across eligible packages via FEFO (earliest-expiring first) and
+ * posts a `MANUAL_DEDUCT` HourTransaction with one HourAllocation per package
+ * slice. Never makes `available` or `reserved` negative — a debit that would
+ * overdraw is rejected with `INSUFFICIENT_HOURS`. Nonblank `reason` required.
+ */
+export interface ManualDebitCommand {
+  studentId: string;
+  courseId: string;
+  units: DecimalString;
+  /** Nonblank admin-supplied reason (audited on the HourTransaction row). */
+  reason: string;
+}
+
+/**
+ * Result of `HourExpirationService.expireDuePackages(now, batchSize)` (Task 10
+ * daily job). `scanned` = packages examined, `processed` = successfully
+ * expired (available→expired moved), `failed` = packages whose expiry raised
+ * (one bad package does NOT abort the batch — the catch is per-package).
+ */
+export interface ExpireBatchResult {
+  scanned: number;
+  processed: number;
+  failed: number;
 }

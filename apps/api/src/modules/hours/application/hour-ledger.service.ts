@@ -4,18 +4,28 @@ import {
   HTTP_STATUS,
   HOUR_ALLOCATION_SOURCE,
   HOUR_TRANSACTION_TYPE,
+  COURSE_PACKAGE_SOURCE,
+  COURSE_PACKAGE_STATUS,
+  type CommandContext,
   type GrantOrderHoursInput,
   type HourPostingAllocation,
   type HourPostingResult,
+  type ManualDebitCommand,
+  type ManualGrantCommand,
   type ReverseOrderHoursInput,
 } from '@member-course/contracts';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { BusinessError } from '../../../common/errors/business-error.js';
 import {
+  IdempotencyService,
+  type IdempotentRequest,
+} from '../../../common/idempotency/idempotency.service.js';
+import {
   HourLockRepository,
   type LockedBalance,
   type LockedPackage,
 } from '../infrastructure/hour-lock.repository.js';
+import { allocate, type AllocatablePackage } from '../domain/hour-allocation-policy.js';
 import {
   addBuckets,
   bucketsToSummary,
@@ -78,7 +88,10 @@ import {
  */
 @Injectable()
 export class HourLedgerService {
-  constructor(private readonly locks: HourLockRepository) {}
+  constructor(
+    private readonly locks: HourLockRepository,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   // ── grantOrder ────────────────────────────────────────────────────────
 
@@ -264,7 +277,409 @@ export class HourLedgerService {
     });
   }
 
-  // ── Shared posting core ───────────────────────────────────────────────
+  // ── grantManual (Task 10) ─────────────────────────────────────────────
+
+  /**
+   * Admin-initiated manual grant. Creates a SEPARATE `CoursePackage` with
+   * `sourceType: MANUAL` (the verbatim Task 10 test asserts this exact token —
+   * see {@link COURSE_PACKAGE_SOURCE.MANUAL} reconciliation note), lands the
+   * full `units` in its `available` bucket, and appends a `MANUAL_GRANT`
+   * HourTransaction. Idempotent on `context.idempotencyKey`.
+   *
+   * Unlike {@link grantOrder}, this method owns its transaction (it creates the
+   * package AND posts the grant atomically, so a failure rolls back both). The
+   * tx is provided by {@link IdempotencyService.execute}, which also dedups on
+   * the idempotency key.
+   *
+   * `reason` MUST be nonblank — a manual adjustment without an audit reason is
+   * rejected as `VALIDATION_FAILED` (400) before any DB write.
+   */
+  async grantManual(
+    command: ManualGrantCommand,
+    context: CommandContext,
+  ): Promise<HourPostingResult> {
+    // ── Validate inputs BEFORE opening the tx (cheap rejection first) ──
+    assertNonblankReason(command.reason);
+    const units = parsePositiveUnits(command.units);
+    const startsOn = parseBusinessDate(command.startsOn, 'startsOn');
+    const expiresOn = parseBusinessDate(command.expiresOn, 'expiresOn');
+    if (expiresOn.getTime() < startsOn.getTime()) {
+      throw new BusinessError(
+        ERROR_CODES.VALIDATION_FAILED,
+        'expiresOn must not be before startsOn',
+        HTTP_STATUS.BAD_REQUEST,
+        { startsOn: command.startsOn, expiresOn: command.expiresOn },
+      );
+    }
+
+    const request: IdempotentRequest = {
+      scope: 'hour-manual-grant',
+      actorId: context.actorId,
+      key: context.idempotencyKey,
+      requestHash: stableHash({
+        studentId: command.studentId,
+        courseId: command.courseId,
+        units: command.units,
+        startsOn: command.startsOn,
+        expiresOn: command.expiresOn,
+        reason: command.reason,
+        intent: 'manual-grant',
+      }),
+    };
+    return this.idempotency.execute<HourPostingResult>(request, (tx) =>
+      this.grantManualInTx(tx, command, units, startsOn, expiresOn, context),
+    );
+  }
+
+  private async grantManualInTx(
+    tx: Prisma.TransactionClient,
+    command: ManualGrantCommand,
+    units: Prisma.Decimal,
+    startsOn: Date,
+    expiresOn: Date,
+    context: CommandContext,
+  ): Promise<HourPostingResult> {
+    // 1. Create the separate MANUAL CoursePackage on this tx. The package
+    //    starts at ZERO available; the grant posting below lands the units and
+    //    reconciles the balance (mirroring how `grantOrder` expects the
+    //    caller-created package to start at 0). `granted` records the nominal
+    //    grant total up-front for display/audit. No sourceOrderItem link —
+    //    manual packages are not tied to an order.
+    const pkg = await tx.coursePackage.create({
+      data: {
+        studentId: command.studentId,
+        courseId: command.courseId,
+        sourceType: COURSE_PACKAGE_SOURCE.MANUAL,
+        sourceOrderItemId: null,
+        startsOn,
+        expiresOn,
+        granted: units,
+        available: 0,
+        reserved: 0,
+        consumed: 0,
+        expired: 0,
+        status: COURSE_PACKAGE_STATUS.ACTIVE,
+      },
+    });
+
+    // 2. Lock the balance + the just-created package, then post the grant on
+    //    the same tx. The businessKey anchors idempotency at the ledger level
+    //    (in addition to IdempotencyService's record-level dedup).
+    const balance = await this.locks.lockBalance(tx, command.studentId, command.courseId);
+    const locked = await this.locks.lockPackages(tx, [pkg.id]);
+    const lockedPkg = locked[0];
+    if (!lockedPkg) {
+      // Unreachable: we just created the package on this tx.
+      throw BusinessError.internal('Manually-granted package missing after create');
+    }
+    const packagesById = new Map<string, LockedPackage>([[lockedPkg.id, lockedPkg]]);
+
+    const txDeltas: Buckets = {
+      available: units,
+      reserved: zeroBuckets().reserved,
+      consumed: zeroBuckets().consumed,
+      expired: zeroBuckets().expired,
+    };
+
+    return this.applyPosting(tx, {
+      studentId: command.studentId,
+      courseId: command.courseId,
+      type: HOUR_TRANSACTION_TYPE.MANUAL_GRANT,
+      businessKey: `manual-grant:${context.idempotencyKey}`,
+      occurredAt: new Date(),
+      reason: command.reason,
+      balance,
+      txDeltas,
+      allocations: [
+        {
+          packageId: lockedPkg.id,
+          sourceType: HOUR_ALLOCATION_SOURCE.MANUAL_GRANT,
+          sourceId: context.actorId,
+          deltas: txDeltas,
+        },
+      ],
+      packagesById,
+    });
+  }
+
+  // ── debitManual (Task 10) ─────────────────────────────────────────────
+
+  /**
+   * Admin-initiated manual debit. Draws `units` from `available` across the
+   * student's eligible packages via FEFO (earliest-expiring first), appending a
+   * `MANUAL_DEDUCT` HourTransaction with one HourAllocation per package slice.
+   * Idempotent on `context.idempotencyKey`.
+   *
+   * ## Overdraft / concurrency guard
+   *
+   * The balance row is locked FOR UPDATE (via {@link HourLockRepository}) and
+   * `available - units` is recomputed in `Prisma.Decimal` UNDER THE LOCK. Two
+   * concurrent debits with DIFFERENT keys both want the final 2.00: the row
+   * lock serializes them; the second debit's locking read observes the first's
+   * committed `available = 0.00`, recomputes `0.00 - 2.00 < 0`, and throws
+   * `INSUFFICIENT_HOURS` (HTTP 409) — exactly one debit fulfills. This is the
+   * brief's "allows only one concurrent debit of the final hours" case: NOT a
+   * same-key idempotency dedup, but a balance-overdraw guard via the row lock.
+   *
+   * `reason` MUST be nonblank. `reserved` is never touched by a manual debit
+   * (M1 only moves available), so reserved cannot go negative either.
+   */
+  async debitManual(
+    command: ManualDebitCommand,
+    context: CommandContext,
+  ): Promise<HourPostingResult> {
+    assertNonblankReason(command.reason);
+    const units = parsePositiveUnits(command.units);
+
+    const request: IdempotentRequest = {
+      scope: 'hour-manual-debit',
+      actorId: context.actorId,
+      key: context.idempotencyKey,
+      requestHash: stableHash({
+        studentId: command.studentId,
+        courseId: command.courseId,
+        units: command.units,
+        reason: command.reason,
+        intent: 'manual-debit',
+      }),
+    };
+    return this.idempotency.execute<HourPostingResult>(request, (tx) =>
+      this.debitManualInTx(tx, command, units, context),
+    );
+  }
+
+  private async debitManualInTx(
+    tx: Prisma.TransactionClient,
+    command: ManualDebitCommand,
+    units: Prisma.Decimal,
+    context: CommandContext,
+  ): Promise<HourPostingResult> {
+    // 1. Lock the balance row FIRST (the overdraw guard's serialization point).
+    const balance = await this.locks.lockBalance(tx, command.studentId, command.courseId);
+
+    // 2. Overdraw guard: recompute available UNDER THE LOCK in Decimal. The
+    //    locked read reflects the latest committed state (locking reads bypass
+    //    the RR snapshot), so a concurrent debit that already committed is
+    //    visible here and we reject rather than go negative.
+    if (balance.buckets.available.minus(units).lt(0)) {
+      throw new BusinessError(
+        ERROR_CODES.INSUFFICIENT_HOURS,
+        'Manual debit would make available balance negative',
+        HTTP_STATUS.CONFLICT,
+        {
+          studentId: command.studentId,
+          courseId: command.courseId,
+          available: to2dp(balance.buckets.available),
+          requested: to2dp(units),
+        },
+      );
+    }
+
+    // 3. Fetch + lock the eligible packages (ACTIVE with available > 0) in
+    //    FEFO order. We lock by id after a plain SELECT so the lock set matches
+    //    exactly the packages we will draw from. Eligible = same student+course,
+    //    ACTIVE, available > 0, and not yet expired-status.
+    const eligibleRows = await tx.coursePackage.findMany({
+      where: {
+        studentId: command.studentId,
+        courseId: command.courseId,
+        status: COURSE_PACKAGE_STATUS.ACTIVE,
+        available: { gt: 0 },
+      },
+      select: { id: true },
+    });
+    const eligibleIds = eligibleRows.map((r) => r.id);
+    const lockedPkgs = await this.locks.lockPackages(tx, eligibleIds);
+
+    // 4. Run the FEFO allocator against the LOCKED rows (their `available`
+    //    values are current as of the lock). The allocator never over-draws a
+    //    single package; combined with the balance overdraw guard above, the
+    //    total drawn equals exactly `units` (we already proved Σ available ≥
+    //    units via the balance check, and Σ package.available === balance.
+    //    available by the reconcilability invariant).
+    const allocatable: AllocatablePackage[] = lockedPkgs.map((p) => ({
+      packageId: p.id,
+      expiresOn: p.expiresOn,
+      createdAt: p.createdAt,
+      available: p.buckets.available,
+    }));
+    const slices = allocate(units, allocatable);
+
+    // 5. Build the per-package delta buckets (availableDelta negated per slice;
+    //    other buckets zero — M1 manual debit only moves `available`) and the
+    //    summary tx deltas (Σ slices negated on available).
+    const packagesById = new Map<string, LockedPackage>(
+      lockedPkgs.map((p) => [p.id, p]),
+    );
+    let drawnAcc = new Prisma.Decimal('0.00');
+    const allocations = slices.map((s) => {
+      const sliceUnits = toDecimal(s.units);
+      drawnAcc = drawnAcc.plus(sliceUnits);
+      const deltas: Buckets = {
+        available: sliceUnits.negated(),
+        reserved: zeroBuckets().reserved,
+        consumed: zeroBuckets().consumed,
+        expired: zeroBuckets().expired,
+      };
+      return {
+        packageId: s.packageId,
+        sourceType: HOUR_ALLOCATION_SOURCE.MANUAL_ADJUSTMENT,
+        sourceId: context.actorId,
+        deltas,
+      };
+    });
+
+    // Defense-in-depth: if no slice was produced (e.g. eligible packages had
+    // available but the allocator found none — shouldn't happen given the
+    // balance check), reject as insufficient rather than posting a zero debit.
+    if (allocations.length === 0) {
+      throw new BusinessError(
+        ERROR_CODES.INSUFFICIENT_HOURS,
+        'No eligible packages available for manual debit',
+        HTTP_STATUS.CONFLICT,
+        {
+          studentId: command.studentId,
+          courseId: command.courseId,
+          requested: to2dp(units),
+        },
+      );
+    }
+
+    const txDeltas: Buckets = {
+      available: drawnAcc.negated(),
+      reserved: zeroBuckets().reserved,
+      consumed: zeroBuckets().consumed,
+      expired: zeroBuckets().expired,
+    };
+
+    return this.applyPosting(tx, {
+      studentId: command.studentId,
+      courseId: command.courseId,
+      type: HOUR_TRANSACTION_TYPE.MANUAL_DEDUCT,
+      businessKey: `manual-debit:${context.idempotencyKey}`,
+      occurredAt: new Date(),
+      reason: command.reason,
+      balance,
+      txDeltas,
+      allocations,
+      packagesById,
+    });
+  }
+
+  // ── expireAvailable (Task 10) ─────────────────────────────────────────
+
+  /**
+   * Move a package's entire `available` bucket to `expired`: append an
+   * `EXPIRE` HourTransaction with `availableDelta = -available,
+   * expiredDelta = +available`, plus one HourAllocation against the package
+   * carrying the same deltas, and flip the package status to EXPIRED (if it has
+   * no remaining hours) or leave it ACTIVE. Idempotent on `businessKey`
+   * (typically `expiry:<packageId>:<businessDate>`) — a replay returns the
+   * original result with no side effects.
+   *
+   * Must run inside the caller's transaction (the expiration service opens one
+   * locked tx per package). `reserved`/`consumed` are NEVER touched by expiry
+   * (M1 only expires available units).
+   */
+  async expireAvailable(
+    tx: Prisma.TransactionClient,
+    packageId: string,
+    businessKey: string,
+  ): Promise<HourPostingResult> {
+    // ── Idempotency fast-path on the expiry businessKey ──
+    const existing = await tx.hourTransaction.findUnique({
+      where: { businessKey },
+      include: { allocations: true },
+    });
+    if (existing) {
+      return this.replayResultFromExisting(tx, existing);
+    }
+
+    // ── Resolve the package's (studentId, courseId) with a NON-locking read ──
+    // (we need the FK values to lock the right balance row, and lockPackageById
+    // does not return them). The package row is then re-locked FOR UPDATE under
+    // the balance lock below, so the gap between this read and that lock is
+    // covered by the balance lock serializing against other posters on the
+    // same (studentId, courseId).
+    const pkgHeader = await tx.coursePackage.findUnique({
+      where: { id: packageId },
+      select: { studentId: true, courseId: true },
+    });
+    if (!pkgHeader) {
+      throw BusinessError.notFound('Course package not found for expiry', { packageId });
+    }
+
+    // ── Lock order: balance FIRST, then the package — matches grantOrder/ ──
+    // reverseOrder/debitManual so there is no cross-deadlock with any other
+    // poster on the same (studentId, courseId).
+    const balance = await this.locks.lockBalance(tx, pkgHeader.studentId, pkgHeader.courseId);
+    const lockedPkgs = await this.locks.lockPackages(tx, [packageId]);
+    const pkg = lockedPkgs[0];
+    if (!pkg) {
+      throw BusinessError.notFound('Course package not found for expiry', { packageId });
+    }
+
+    // Expire ONLY available units. A package with available <= 0 has nothing
+    // to expire; rather than consuming the businessKey with a zero-delta row,
+    // skip the posting entirely. The caller (expiration service) pre-filters
+    // available > 0, but defend here too.
+    const available = pkg.buckets.available;
+    if (available.lte(0)) {
+      // Return a synthesized no-op result without writing a transaction row.
+      // The businessKey is NOT consumed, so a later run (if available ever
+      // becomes positive again — e.g. a fresh grant into this package) can
+      // still expire using the same key.
+      return {
+        transactionId: '',
+        balanceId: balance.id,
+        allocations: [],
+        balance: bucketsToSummary(balance.buckets),
+      };
+    }
+
+    const packagesById = new Map<string, LockedPackage>([[pkg.id, pkg]]);
+    const txDeltas: Buckets = {
+      available: available.negated(),
+      reserved: zeroBuckets().reserved,
+      consumed: zeroBuckets().consumed,
+      expired: available,
+    };
+
+    const result = await this.applyPosting(tx, {
+      studentId: pkgHeader.studentId,
+      courseId: pkgHeader.courseId,
+      type: HOUR_TRANSACTION_TYPE.EXPIRE,
+      businessKey,
+      occurredAt: new Date(),
+      reason: 'daily expiration',
+      balance,
+      txDeltas,
+      allocations: [
+        {
+          packageId: pkg.id,
+          sourceType: HOUR_ALLOCATION_SOURCE.EXPIRE,
+          sourceId: pkg.id,
+          deltas: txDeltas,
+        },
+      ],
+      packagesById,
+    });
+
+    // A package whose available just went to 0 is EXPIRED. Bounded UPDATE
+    // (`available = 0`) so it only fires when truly drained; the package X
+    // lock is held for the whole tx so no concurrent post can interleave.
+    await tx.$executeRaw`
+      UPDATE \`course_package\`
+      SET \`status\`   = ${COURSE_PACKAGE_STATUS.EXPIRED},
+          \`version\`   = \`version\` + 1,
+          \`updatedAt\` = UTC_TIMESTAMP(3)
+      WHERE \`id\` = ${packageId} AND \`available\` = 0
+    `;
+
+    return result;
+  }
+
+
 
   /**
    * Apply a posting: append the HourTransaction + one HourAllocation per
@@ -565,4 +980,118 @@ function toDateOnly(d: Date): string {
   // Pad helper kept local — used only here.
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+// ── Task 10 manual-adjustment helpers ───────────────────────────────────
+
+/**
+ * Reject a blank/whitespace-only reason. A manual adjustment MUST carry an
+ * auditable reason; without one the call is invalid before any DB write.
+ * Trimmed emptiness (incl. strings of only spaces) → 400 VALIDATION_FAILED.
+ */
+function assertNonblankReason(reason: unknown): void {
+  if (typeof reason !== 'string' || reason.trim().length === 0) {
+    throw new BusinessError(
+      ERROR_CODES.VALIDATION_FAILED,
+      'reason must be a non-blank string',
+      HTTP_STATUS.BAD_REQUEST,
+      { reason },
+    );
+  }
+}
+
+/**
+ * Parse a decimal-string units value, asserting it is a finite, strictly
+ * positive Decimal. Rejects non-numeric, zero, and negative inputs as
+ * `HOURS_MUST_BE_POSITIVE` (422). Returns the `Prisma.Decimal` form — all
+ * downstream arithmetic stays in Decimal (never JS number, per the global
+ * constraint).
+ */
+function parsePositiveUnits(units: unknown): Prisma.Decimal {
+  if (typeof units !== 'string' || units.trim().length === 0) {
+    throw new BusinessError(
+      ERROR_CODES.VALIDATION_FAILED,
+      'units must be a non-blank decimal string',
+      HTTP_STATUS.BAD_REQUEST,
+      { units },
+    );
+  }
+  let parsed: Prisma.Decimal;
+  try {
+    parsed = new Prisma.Decimal(units.trim());
+  } catch {
+    throw new BusinessError(
+      ERROR_CODES.VALIDATION_FAILED,
+      'units must be a valid decimal string',
+      HTTP_STATUS.BAD_REQUEST,
+      { units },
+    );
+  }
+  if (!parsed.isFinite() || parsed.lte(0)) {
+    throw new BusinessError(
+      ERROR_CODES.HOURS_MUST_BE_POSITIVE,
+      'units must be greater than 0',
+      HTTP_STATUS.UNPROCESSABLE_ENTITY,
+      { units },
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Parse a `YYYY-MM-DD` business-date string into a UTC-midnight Date for the
+ * `@db.Date` columns (`startsOn`/`expiresOn`). The schema stores date-only
+ * columns without timezone, so we anchor at UTC 00:00 to preserve the exact
+ * year/month/day the caller supplied. Rejects malformed dates as 400.
+ */
+function parseBusinessDate(value: unknown, field: string): Date {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new BusinessError(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${field} must be a YYYY-MM-DD string`,
+      HTTP_STATUS.BAD_REQUEST,
+      { field, value },
+    );
+  }
+  // Validate the actual calendar date (rejects 2026-13-40 etc.).
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new BusinessError(
+      ERROR_CODES.VALIDATION_FAILED,
+      `${field} is not a valid calendar date`,
+      HTTP_STATUS.BAD_REQUEST,
+      { field, value },
+    );
+  }
+  return date;
+}
+
+/**
+ * Build a deterministic request hash for an idempotency key. Two requests that
+ * carry the same key MUST carry the same body (per the idempotency contract); a
+ * mismatched hash surfaces as `IDEMPOTENCY_KEY_REUSED` (409). Mirrors the
+ * implementation in OfflineOrderService — FNV-1a (32-bit) over sorted-key JSON
+ * of the identifying fields. Kept local (not shared) so the hours module has no
+ * cross-module helper dependency for a 10-line function.
+ */
+function stableHash(value: Record<string, unknown>): string {
+  const json = JSON.stringify(sortKeys(value));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+      out[k] = sortKeys((value as Record<string, unknown>)[k]);
+    }
+    return out;
+  }
+  return value;
 }

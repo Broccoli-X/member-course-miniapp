@@ -4,6 +4,8 @@ import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { getMysqlContext, type MysqlTestContext } from '../helpers/mysql-test-environment.js';
 import { HourLedgerService } from '../../src/modules/hours/application/hour-ledger.service.js';
 import { HourLockRepository } from '../../src/modules/hours/infrastructure/hour-lock.repository.js';
+import { IdempotencyService } from '../../src/common/idempotency/idempotency.service.js';
+import { PrismaService } from '../../src/infrastructure/prisma/prisma.service.js';
 import {
   HOUR_TRANSACTION_TYPE,
   type GrantOrderHoursInput,
@@ -42,7 +44,11 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       ctx = await getMysqlContext();
       if (!ctx) return;
       db = new PrismaClient({ datasources: { db: { url: ctx.databaseUrl } } });
-      ledger = new HourLedgerService(new HourLockRepository());
+      const dbAsService = db as unknown as PrismaService;
+      ledger = new HourLedgerService(
+        new HourLockRepository(),
+        new IdempotencyService(dbAsService),
+      );
     });
 
     beforeEach(async () => {
