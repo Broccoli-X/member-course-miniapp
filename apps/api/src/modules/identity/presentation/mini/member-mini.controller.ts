@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import {
+  ERROR_CODES,
   type MemberCreateStudentRequest,
   type MemberPrincipal,
   type MemberSelfView,
@@ -23,6 +24,7 @@ import { PrismaService } from '../../../../infrastructure/prisma/prisma.service.
 import { StudentProfileService, toStudentView } from '../../application/student-profile.service.js';
 import { StudentAccessService } from '../../application/student-access.service.js';
 import { AccountStudentRelationService } from '../../application/account-student-relation.service.js';
+import { BusinessError } from '../../../../common/errors/business-error.js';
 import { MiniAuthGuard } from './mini-auth.guard.js';
 import { BoundMemberGuard } from './bound-member.guard.js';
 import {
@@ -145,9 +147,13 @@ export class MemberMiniController {
       include: { student: true },
     });
     // Defensive: assertRelated passed so the row exists, but a race could
-    // delete it between the check and the read. Treat as forbidden.
+    // delete it between the check and the read. Treat as forbidden, not a 500.
     if (!relation) {
-      throw new Error('Relation vanished between access check and read');
+      throw BusinessError.forbidden(
+        ERROR_CODES.STUDENT_FORBIDDEN,
+        'Student not accessible',
+        { accountId: principal.accountId, studentId },
+      );
     }
     return {
       student: toStudentView(relation.student),

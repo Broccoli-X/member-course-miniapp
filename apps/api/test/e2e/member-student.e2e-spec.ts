@@ -257,6 +257,67 @@ describe('Member/student/guardian relations (e2e)', () => {
     expect(res.body.code).toBe('STATE_CHANGED');
   });
 
+  it('serializes two CONCURRENT SELF creates for one member to exactly one winner (race-safe)', async () => {
+    if (!ctx) return;
+    const member = await boundMember('openid-self-race', '13800000007');
+
+    // Fire both requests simultaneously against the SAME bound member. With a
+    // non-locking read, both read (no SELF) and both insert → two SELF rows.
+    // With SELECT ... FOR UPDATE, the second tx blocks on the gap/row lock
+    // until the first commits, then observes the inserted SELF and rejects.
+    const [a, b] = await Promise.allSettled([
+      request(app.getHttpServer())
+        .post('/api/mini/v1/students')
+        .set(memberAuth(member.accessToken))
+        .send({ relationship: 'SELF', displayName: 'Race A' }),
+      request(app.getHttpServer())
+        .post('/api/mini/v1/students')
+        .set(memberAuth(member.accessToken))
+        .send({ relationship: 'SELF', displayName: 'Race B' }),
+    ]);
+    const statusOf = (r: PromiseSettledResult<{ status: number }>) =>
+      r.status === 'fulfilled' ? r.value.status : -1;
+    const statuses = [statusOf(a as never), statusOf(b as never)].sort();
+    const created = statuses.filter((s) => s === 201).length;
+    const conflicts = statuses.filter((s) => s === 409).length;
+    // Exactly ONE create wins (201) and exactly ONE loses (409 STATE_CHANGED).
+    expect(created).toBe(1);
+    expect(conflicts).toBe(1);
+    // Exactly ONE create wins (201) and exactly ONE loses (409 STATE_CHANGED).
+    expect(created).toBe(1);
+    expect(conflicts).toBe(1);
+    if (a.status === 'fulfilled' && a.value.status === 409) {
+      expect(a.value.body.code).toBe('STATE_CHANGED');
+    }
+    if (b.status === 'fulfilled' && b.value.status === 409) {
+      expect(b.value.body.code).toBe('STATE_CHANGED');
+    }
+    // And the member ends with exactly ONE SELF relation.
+    const selfRelations = await db.accountStudentRelation.findMany({
+      where: { accountId: member.accountId, relationType: 'SELF' },
+    });
+    expect(selfRelations).toHaveLength(1);
+  });
+
+  it('mini create rejects PARENT relationship with 400 VALIDATION_FAILED (admin-mediated only)', async () => {
+    if (!ctx) return;
+    const member = await boundMember('openid-self-parent', '13800000008');
+    // PARENT is an admin-mediated relation type; the mini client may only
+    // assert SELF or GUARDIAN (contract: member.ts).
+    const res = await request(app.getHttpServer())
+      .post('/api/mini/v1/students')
+      .set(memberAuth(member.accessToken))
+      .send({ relationship: 'PARENT', displayName: 'Parent' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_FAILED');
+    // Sanity: SELF and GUARDIAN still succeed on the same path.
+    await createStudent(member.accessToken, { relationship: 'SELF', displayName: 'Self OK' });
+    await createStudent(member.accessToken, {
+      relationship: 'GUARDIAN',
+      displayName: 'Guardian OK',
+    });
+  });
+
   // ── Admin endpoints ───────────────────────────────────────────────────
 
   it('admin lists, creates, and reads a member with their students', async () => {
