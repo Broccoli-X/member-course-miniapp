@@ -71,6 +71,17 @@ export async function createDuplicateAccountStudentRelation(db: PrismaClient): P
 }
 
 export async function createDuplicateIdempotencyKey(db: PrismaClient): Promise<unknown> {
+  // Seed the first row so the @@unique([scope, actorId, key]) index has
+  // something to conflict against — the test asserts the *second* insert
+  // throws P2002, so the first must already exist in the table.
+  await db.idempotencyRecord.create({
+    data: {
+      scope: 'order-confirm',
+      actorId: 'admin-1',
+      key: 'order-1',
+      requestHash: 'abc123-seed',
+    },
+  });
   return db.idempotencyRecord.create({
     data: {
       scope: 'order-confirm',
