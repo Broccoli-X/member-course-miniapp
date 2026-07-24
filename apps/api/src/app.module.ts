@@ -5,9 +5,10 @@ import { TraceIdMiddleware } from './common/http/trace-id.middleware.js';
 import { IdempotencyService } from './common/idempotency/idempotency.service.js';
 import { IdentityModule } from './modules/identity/identity.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
+import { HoursModule } from './modules/hours/hours.module.js';
 
 @Module({
-  imports: [PrismaModule, IdentityModule, CatalogModule],
+  imports: [PrismaModule, IdentityModule, CatalogModule, HoursModule],
   controllers: [HealthController],
   providers: [IdempotencyService],
 })
