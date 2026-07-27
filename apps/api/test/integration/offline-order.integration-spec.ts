@@ -14,6 +14,7 @@ import {
   type CommandContext,
   type CreateOfflineOrderCommand,
 } from '@member-course/contracts';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 import { calculateExpiryDate } from '../../src/common/time/business-date.js';
 
 /**
@@ -61,7 +62,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
 
     beforeEach(async () => {
       if (!ctx) return;
-      await truncateOrderTables(db);
+      await truncateAllTables(db);
     });
 
     afterAll(async () => {
@@ -583,28 +584,6 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
     });
   },
 );
-
-// ── Truncate helper ───────────────────────────────────────────────────────
-
-async function truncateOrderTables(db: PrismaClient): Promise<void> {
-  await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-  try {
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_allocation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_transaction\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course_package\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_course_balance\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`order_item\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`offline_order\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`account_student_relation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_profile\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`idempotency_record\``);
-  } finally {
-    await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-  }
-}
 
 /**
  * Compute the expected expiresOn (UTC midnight ISO) for a confirm that happened

@@ -16,6 +16,7 @@ import {
 } from '../doubles/fake-wechat.gateway.js';
 import { normalizePhone } from '../../src/modules/identity/domain/phone.js';
 import { seedAdmin } from '../../prisma/seed.js';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * Course / package catalog e2e — task-7-brief.md.
@@ -74,27 +75,13 @@ describe('Course and package catalog (e2e)', () => {
   beforeEach(async () => {
     if (!ctx || !db) return;
     fakeWechat.reset();
-    await truncateCatalogTables(db);
+    await truncateAllTables(db);
     await seedAdmin({ db, username: TEST_USERNAME, password: TEST_PASSWORD });
   });
 
   afterEach(async () => {
-    if (ctx && db) await truncateCatalogTables(db);
+    if (ctx && db) await truncateAllTables(db);
   });
-
-  async function truncateCatalogTables(client: PrismaClient): Promise<void> {
-    await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-    try {
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`refresh_session\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`wechat_identity\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`admin_user\``);
-    } finally {
-      await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-    }
-  }
 
   // ── Auth helpers ──────────────────────────────────────────────────────
 

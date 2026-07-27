@@ -10,6 +10,7 @@ import { getMysqlContext, type MysqlTestContext } from '../helpers/mysql-test-en
 import { FakeWechatGateway } from '../doubles/fake-wechat.gateway.js';
 import { seedAdmin } from '../../prisma/seed.js';
 import { createM1JourneyDriver } from '../helpers/m1-journey-driver.js';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * M1 end-to-end member-asset journey (Task 16).
@@ -83,33 +84,10 @@ describe('M1 member-asset journey (e2e)', () => {
   beforeEach(async () => {
     if (!ctx || !db) return;
     fakeWechat.reset();
-    await truncateTables(db);
+    await truncateAllTables(db);
     await seedAdmin({ db, username: TEST_USERNAME, password: TEST_PASSWORD });
     admin.resetAdminToken();
   });
-
-  async function truncateTables(client: PrismaClient): Promise<void> {
-    await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-    try {
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`hour_allocation\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`hour_transaction\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`course_package\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`student_course_balance\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`order_item\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`offline_order\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`account_student_relation\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`student_profile\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`idempotency_record\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`refresh_session\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`wechat_identity\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`admin_user\``);
-    } finally {
-      await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-    }
-  }
 
   // ── The M1 closed-loop journey (Gates 1–8) ──────────────────────────────
 

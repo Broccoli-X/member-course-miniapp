@@ -11,6 +11,7 @@ import {
   type GrantOrderHoursInput,
   type HourPostingResult,
 } from '@member-course/contracts';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * Hour-ledger integration tests (Task 8 brief, Steps 1 & 4 verbatim cases plus
@@ -53,7 +54,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
 
     beforeEach(async () => {
       if (!ctx) return;
-      await truncateHoursTables(db);
+      await truncateAllTables(db);
     });
 
     afterAll(async () => {
@@ -608,26 +609,9 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
 /**
  * Truncate the hour-ledger tables and their FK parents between tests. The
  * hours tables reference student_profile / course / order_item / course_package,
- * so we clear children first, then parents, with FK checks disabled.
+ * so we clear children first, then parents, with FK checks disabled. The
+ * shared {@link truncateAllTables} helper performs the full-DB version.
  */
-async function truncateHoursTables(db: PrismaClient): Promise<void> {
-  await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-  try {
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_allocation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_transaction\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course_package\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_course_balance\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`order_item\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`offline_order\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`account_student_relation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_profile\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-  } finally {
-    await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-  }
-}
 
 /** True when `err` is a Prisma P2002 (unique-constraint violation). */
 function isP2002(err: unknown): boolean {

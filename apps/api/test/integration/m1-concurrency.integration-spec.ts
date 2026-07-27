@@ -18,6 +18,7 @@ import {
   type CreateOfflineOrderCommand,
   ERROR_CODES,
 } from '@member-course/contracts';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * M1 concurrency integration tests (Task 16).
@@ -98,7 +99,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
     beforeEach(async () => {
       if (!ctx) return;
       fakeWechat.reset();
-      await truncateAll(db);
+      await truncateAllTables(db);
     });
 
     afterAll(async () => {
@@ -107,29 +108,6 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
     });
 
     // ── Helpers ──────────────────────────────────────────────────────────
-
-    async function truncateAll(client: PrismaClient): Promise<void> {
-      await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-      try {
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`hour_allocation\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`hour_transaction\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`course_package\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`student_course_balance\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`order_item\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`offline_order\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`account_student_relation\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`student_profile\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`idempotency_record\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`refresh_session\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`wechat_identity\``);
-        await client.$executeRawUnsafe(`TRUNCATE TABLE \`admin_user\``);
-      } finally {
-        await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-      }
-    }
 
     async function seedCatalog(opts: {
       accountId: string;

@@ -8,6 +8,7 @@ import { AppModule } from '../../src/app.module.js';
 import { BusinessErrorFilter } from '../../src/common/errors/business-error.filter.js';
 import { getMysqlContext, type MysqlTestContext } from '../helpers/mysql-test-environment.js';
 import { seedAdmin } from '../../prisma/seed.js';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * Administrator authentication e2e.
@@ -54,26 +55,16 @@ describe('Admin auth (e2e)', () => {
 
   beforeEach(async () => {
     if (!ctx || !db) return;
-    await truncateAuthTables(db);
+    await truncateAllTables(db);
     await seedAdmin({ db, username: TEST_USERNAME, password: TEST_PASSWORD });
   });
 
   afterEach(async () => {
     // Best-effort: leave the tables clean for the next file/run.
-    if (ctx && db) await truncateAuthTables(db);
+    if (ctx && db) await truncateAllTables(db);
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────
-
-  async function truncateAuthTables(client: PrismaClient): Promise<void> {
-    await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-    try {
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`refresh_session\``);
-      await client.$executeRawUnsafe(`TRUNCATE TABLE \`admin_user\``);
-    } finally {
-      await client.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-    }
-  }
 
   async function loginAsAdmin(
     creds: { username: string; password: string } = { username: TEST_USERNAME, password: TEST_PASSWORD },

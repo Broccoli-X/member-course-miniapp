@@ -3,9 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { getMysqlContext, type MysqlTestContext } from '../helpers/mysql-test-environment.js';
 import {
   createIdentityFixtures,
-  truncateIdentityTables,
 } from '../helpers/identity-fixtures.js';
 import { FakeWechatGateway } from '../doubles/fake-wechat.gateway.js';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 import { PrismaClient } from '../../src/generated/prisma/client.js';
 import { WechatAuthService } from '../../src/modules/identity/application/wechat-auth.service.js';
 import { PhoneBindingService } from '../../src/modules/identity/application/phone-binding.service.js';
@@ -86,7 +86,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
     beforeEach(async () => {
       if (!ctx) return;
       fakeWechat.reset();
-      await truncateIdentityTables(db);
+      await truncateAllTables(db);
     });
 
     afterAll(async () => {

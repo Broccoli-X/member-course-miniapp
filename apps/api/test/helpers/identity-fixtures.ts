@@ -169,24 +169,3 @@ export function createIdentityFixtures(deps: {
     },
   };
 }
-
-/**
- * Truncate the three tables the member-auth flow touches. Wraps the truncate
- * loop in `SET FOREIGN_KEY_CHECKS = 0` so child tables (`wechat_identity`,
- * `refresh_session`) can be cleared before the parent `member_account`. Also
- * clears `admin_user` so admin-side tests in the same DB run don't interfere.
- *
- * Exported standalone (not part of the bound fixture set) because it doesn't
- * need the auth services — just a DB client.
- */
-export async function truncateIdentityTables(db: DbLike): Promise<void> {
-  await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-  try {
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`refresh_session\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`wechat_identity\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`admin_user\``);
-  } finally {
-    await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-  }
-}

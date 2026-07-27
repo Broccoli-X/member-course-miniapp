@@ -10,7 +10,7 @@ import { WECHAT_GATEWAY } from '../../src/modules/identity/tokens.js';
 import { getMysqlContext, type MysqlTestContext } from '../helpers/mysql-test-environment.js';
 import { FakeWechatGateway, loginCodeFor, phoneCodeFor, phonePartsFor } from '../doubles/fake-wechat.gateway.js';
 import { normalizePhone } from '../../src/modules/identity/domain/phone.js';
-import { truncateIdentityTables } from '../helpers/identity-fixtures.js';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * Mini-program (member) auth e2e — task-5-brief.md.
@@ -72,11 +72,11 @@ describe('Mini auth (e2e)', () => {
   beforeEach(async () => {
     if (!ctx || !db) return;
     fakeWechat.reset();
-    await truncateIdentityTables(db);
+    await truncateAllTables(db);
   });
 
   afterEach(async () => {
-    if (ctx && db) await truncateIdentityTables(db);
+    if (ctx && db) await truncateAllTables(db);
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────

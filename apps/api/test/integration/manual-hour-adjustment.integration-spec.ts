@@ -9,8 +9,8 @@ import { PrismaService } from '../../src/infrastructure/prisma/prisma.service.js
 import {
   HOUR_TRANSACTION_TYPE,
   type CommandContext,
-  type HourPostingResult,
 } from '@member-course/contracts';
+import { truncateAllTables } from '../helpers/truncate-all-tables.js';
 
 /**
  * Manual-hour-adjustment integration tests (Task 10 brief, Step 1 verbatim
@@ -53,7 +53,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
 
     beforeEach(async () => {
       if (!ctx) return;
-      await truncateTables(db);
+      await truncateAllTables(db);
       await seedStudentCourse();
     });
 
@@ -448,27 +448,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
   },
 );
 
-// ── Truncate + helpers ───────────────────────────────────────────────────
-
-async function truncateTables(db: PrismaClient): Promise<void> {
-  await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 0`);
-  try {
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_allocation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`hour_transaction\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course_package\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_course_balance\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`order_item\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`offline_order\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`package_product\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`account_student_relation\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`student_profile\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`course\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`member_account\``);
-    await db.$executeRawUnsafe(`TRUNCATE TABLE \`idempotency_record\``);
-  } finally {
-    await db.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS = 1`);
-  }
-}
+// ── Helpers ──────────────────────────────────────────────────────────────
 
 // Keep the Prisma import referenced for type-only usage in JSDoc / future.
 void (undefined as unknown as Prisma.TransactionClient);
