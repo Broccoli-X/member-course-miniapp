@@ -2,10 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ERROR_CODES, HTTP_STATUS, type MemberPrincipal } from '@member-course/contracts';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service.js';
 import { BusinessError } from '../../../common/errors/business-error.js';
+import { TokenService } from '../domain/password-hasher.js';
 import { WechatGateway } from '../domain/wechat-gateway.js';
 import { normalizePhone } from '../domain/phone.js';
-import { WECHAT_GATEWAY } from '../tokens.js';
-import { MEMBER_STATUS } from './wechat-auth.service.js';
+import { TOKEN_SERVICE, WECHAT_GATEWAY } from '../tokens.js';
+import {
+  ACCESS_TOKEN_LIFETIME_SECONDS,
+  MEMBER_STATUS,
+} from './wechat-auth.service.js';
 
 /** Result of {@link PhoneBindingService.bind}. */
 export interface PhoneBindingResult {
@@ -13,6 +17,23 @@ export interface PhoneBindingResult {
   readonly accountId: string;
   /** The normalized phone now bound to the account. */
   readonly normalizedPhone: string;
+  /**
+   * Fresh access token signed for the BOUND account (`provisional:false`). The
+   * member's pre-bind token may still carry `provisional:true` or — in the merge
+   * case — point at the now-DISABLED provisional account, so the caller MUST
+   * replace its session with this token before reaching private endpoints.
+   */
+  readonly accessToken: string;
+  /**
+   * Fresh refresh token (plaintext) for the BOUND account. The server persists
+   * the matching {@link RefreshSession} row as part of the bind flow so this
+   * token is immediately usable for `/auth/refresh`.
+   */
+  readonly refreshToken: string;
+  /** Access-token lifetime in seconds (mirrors `WechatLoginResponse`). */
+  readonly expiresIn: number;
+  /** Always false — the bind succeeded so the account is no longer provisional. */
+  readonly provisional: boolean;
 }
 
 /**
@@ -58,12 +79,25 @@ export interface PhoneBindingResult {
  * STATE_CHANGED; binding to a different account → conflict) is what stops a
  * replayed code from doing damage even if WeChat's single-use guarantee were
  * bypassed.
+ *
+ * ## Post-bind tokens (M1 final-review fix: bindPhone usable session)
+ *
+ * A successful bind ALWAYS returns a fresh access + refresh token pair signed
+ * for the FINAL bound account (`provisional:false`). The pre-bind access token
+ * is unsafe to keep using: in the merge case its `sub` points at the now-
+ * DISABLED provisional account, so {@link BoundMemberGuard} would reject the
+ * next private request with 403 `STUDENT_FORBIDDEN` (not 401, so the http
+ * layer's 401→refresh retry does not fire). The pre-bind refresh token is
+ * likewise stale in the merge case. The client therefore MUST rotate both
+ * tokens onto the response's pair; the persisted {@link RefreshSession} row is
+ * created inside the same tx so the refresh token is immediately usable.
  */
 @Injectable()
 export class PhoneBindingService {
   constructor(
     private readonly db: PrismaService,
     @Inject(WECHAT_GATEWAY) private readonly wechat: WechatGateway,
+    @Inject(TOKEN_SERVICE) private readonly tokens: TokenService,
   ) {}
 
   async bind(
@@ -80,7 +114,13 @@ export class PhoneBindingService {
       `${phoneInfo.countryCode}${phoneInfo.purePhoneNumber}`,
     );
 
-    return this.db.$transaction(async (tx) => {
+    // The merge + token issuance run inside ONE tx. Persisting the new
+    // RefreshSession atomically with the merge means a failed bind leaves no
+    // orphaned session row, and issuing the plaintext inside the tx lets us
+    // return it directly (no second issue + hash-overwrite dance). JWT signing
+    // has no DB IO and is cheap, so keeping it inside the tx does not extend
+    // the row-lock window meaningfully.
+    const bound = await this.db.$transaction(async (tx) => {
       // 1. Load + lock the caller's provisional account. The SELECT ... FOR
       //    UPDATE locks the row for the duration of the tx so two concurrent
       //    binds on the SAME provisional account serialize (the loser sees the
@@ -185,7 +225,23 @@ export class PhoneBindingService {
           },
         });
 
-        return { accountId: precreated.id, normalizedPhone };
+        // Mint the bound account's refresh session inside the same tx. The
+        // precreated account is the surviving subject — the provisional's prior
+        // session (if any) is left behind on a now-DISABLED account and will
+        // fail validation on next use, which is exactly what we want.
+        const refresh = await this.tokens.issueRefreshToken(precreated.id);
+        await tx.refreshSession.create({
+          data: {
+            memberAccountId: precreated.id,
+            tokenHash: refresh.tokenHash,
+            expiresAt: refresh.expiresAt,
+          },
+        });
+
+        return {
+          accountId: precreated.id,
+          refreshToken: refresh.token,
+        };
       }
 
       // 5. No pre-created account owns this phone → bind it to the provisional
@@ -198,7 +254,44 @@ export class PhoneBindingService {
         data: { normalizedPhone, isProvisional: false },
       });
 
-      return { accountId: principal.accountId, normalizedPhone };
+      // The bound account IS the provisional account, in-place. The member may
+      // have an existing refresh session from login; we mint a NEW one tied to
+      // the now-bound account so the client rotates onto it. The old session is
+      // not revoked here — the client's setSession replaces its persisted token,
+      // and the old session simply expires (or is revoked on next logout).
+      const refresh = await this.tokens.issueRefreshToken(principal.accountId);
+      await tx.refreshSession.create({
+        data: {
+          memberAccountId: principal.accountId,
+          tokenHash: refresh.tokenHash,
+          expiresAt: refresh.expiresAt,
+        },
+      });
+
+      return {
+        accountId: principal.accountId,
+        refreshToken: refresh.token,
+      };
     });
+
+    // Sign the access token for the final bound account. `provisional:false` is
+    // the source of truth — the merge above guarantees the bound account row is
+    // now non-provisional, and BoundMemberGuard reloads the row on every
+    // private request anyway, so even if this flag were stale the guard would
+    // still admit the request. Signing here (after the tx commits) is fine
+    // because the JWT is a derived artefact of the persisted merge state.
+    const accessToken = await this.tokens.signMemberAccessToken({
+      accountId: bound.accountId,
+      provisional: false,
+    });
+
+    return {
+      accountId: bound.accountId,
+      normalizedPhone,
+      accessToken,
+      refreshToken: bound.refreshToken,
+      expiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
+      provisional: false,
+    };
   }
 }

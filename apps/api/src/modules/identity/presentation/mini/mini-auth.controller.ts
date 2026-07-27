@@ -83,6 +83,10 @@ export class MiniAuthController {
     const response: BindPhoneResponse = {
       accountId: result.accountId,
       normalizedPhone: result.normalizedPhone,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresIn: result.expiresIn,
+      provisional: result.provisional,
     };
     return response;
   }

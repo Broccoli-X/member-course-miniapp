@@ -48,6 +48,8 @@ export interface CreatedOrder {
 /** Mini-program session produced by `mini.bindWechatToPhone`. */
 export interface MiniSession {
   readonly accessToken: string;
+  /** Refresh token from the bind response (M1 final-review fix I-2). */
+  readonly refreshToken: string;
   readonly accountId: string;
 }
 
@@ -311,9 +313,19 @@ export function createM1JourneyDriver(deps: {
     /**
      * Gate 2: drive the full mini login + bind flow for a phone that the admin
      * pre-created. The provisional WeChat identity binds to the same phone and
-     * atomically migrates onto the pre-created account. Returns a fresh access
-     * token minted AFTER binding so `provisional:false` is encoded and the
-     * BoundMemberGuard admits subsequent private requests.
+     * atomically migrates onto the pre-created account. Returns the access +
+     * refresh token pair the bind endpoint minted for the FINAL bound account
+     * (provisional:false), so subsequent private requests exercise the REAL
+     * client behaviour: a single WeChat login code, then bind, then private
+     * reads using the bind-issued tokens.
+     *
+     * NOTE (M1 final-review fix I-2): the driver previously re-ran
+     * `wechat-login` with the SAME code after bind to mint a non-provisional
+     * token. That masked the "bindPhone half-resolves auth" regression because
+     * it side-stepped the bind response entirely and relied on a WeChat code
+     * being reusable — which it is NOT in production (codes are single-use).
+     * The driver now uses the bind response's tokens verbatim, so a regression
+     * that drops them or signs them for the wrong account fails the journey.
      */
     async bindWechatToPhone(
       phone: string,
@@ -329,19 +341,18 @@ export function createM1JourneyDriver(deps: {
       const normalized = normalizePhone(phone);
       const phoneCode = phoneCodeFor(normalized);
       fakeWechat.setPhone(phoneCode, phonePartsFor(normalized));
-      await request(http())
+      const bind = await request(http())
         .post('/api/mini/v1/auth/bind-phone')
         .set('Authorization', `Bearer ${login.body.accessToken}`)
         .send({ phoneCode })
         .expect(200);
-      // Re-login to mint a token with provisional:false encoded.
-      const relogin = await request(http())
-        .post('/api/mini/v1/auth/wechat-login')
-        .send({ code })
-        .expect(200);
+      // Use the bind response's tokens verbatim — do NOT re-login (a real
+      // WeChat code is single-use, so re-login is not reproducible in prod and
+      // would mask a regression in the bind-issued tokens).
       return {
-        accessToken: relogin.body.accessToken as string,
-        accountId: relogin.body.accountId as string,
+        accessToken: bind.body.accessToken as string,
+        refreshToken: bind.body.refreshToken as string,
+        accountId: bind.body.accountId as string,
       };
     },
 

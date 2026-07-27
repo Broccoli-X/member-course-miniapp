@@ -140,6 +140,27 @@ export interface BindPhoneResponse {
   readonly accountId: string;
   /** The normalized phone number now bound to the account. */
   readonly normalizedPhone: string;
+  /**
+   * A fresh access token signed for the BOUND account (provisional:false). The
+   * member's pre-bind token may still carry `provisional:true` or — in the merge
+   * case — point at the now-DISABLED provisional account, so the client MUST
+   * replace its in-memory access token with this one before reaching private
+   * endpoints. {@link BoundMemberGuard} reloads the live DB row, but the `sub`
+   * still has to identify the ACTIVE bound account.
+   */
+  readonly accessToken: string;
+  /**
+   * A fresh refresh token bound to the BOUND account. The pre-bind refresh
+   * token was issued for the provisional account and (in the merge case) is no
+   * longer usable, so the client MUST rotate its persisted refresh token to
+   * this one. The server persists the new {@link RefreshSession} row as part of
+   * the bind transaction.
+   */
+  readonly refreshToken: string;
+  /** Access-token lifetime in seconds (OAuth2 `expires_in` semantics). */
+  readonly expiresIn: number;
+  /** Always false after a successful bind (the account is no longer provisional). */
+  readonly provisional: boolean;
 }
 
 /** Body of `POST /api/mini/v1/auth/refresh`. */

@@ -72,7 +72,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       // PrismaService extends PrismaClient, so a raw PrismaClient is a valid
       // stand-in for the `db` parameter the services expect.
       auth = new WechatAuthService(db as unknown as import('../../src/infrastructure/prisma/prisma.service.js').PrismaService, fakeWechat, tokens);
-      binding = new PhoneBindingService(db as unknown as import('../../src/infrastructure/prisma/prisma.service.js').PrismaService, fakeWechat);
+      binding = new PhoneBindingService(db as unknown as import('../../src/infrastructure/prisma/prisma.service.js').PrismaService, fakeWechat, tokens);
 
       const fixtures = createIdentityFixtures({ auth, binding, fake: fakeWechat, db });
       loginWithWechat = fixtures.loginWithWechat;

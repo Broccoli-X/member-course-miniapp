@@ -82,7 +82,7 @@ describe.skipIf(!process.env.RUN_INTEGRATION)(
       const tokens = new JwtTokenService(jwt);
       fakeWechat = new FakeWechatGateway();
       auth = new WechatAuthService(dbAsService, fakeWechat, tokens);
-      binding = new PhoneBindingService(dbAsService, fakeWechat);
+      binding = new PhoneBindingService(dbAsService, fakeWechat, tokens);
       students = new StudentProfileService(dbAsService);
 
       const fixtures = createIdentityFixtures({

@@ -109,7 +109,14 @@ describe('Mini auth (e2e)', () => {
     accessToken: string,
     phone: string,
     expectStatus = 200,
-  ): Promise<{ accountId: string; normalizedPhone: string }> {
+  ): Promise<{
+    accountId: string;
+    normalizedPhone: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    provisional: boolean;
+  }> {
     const normalizedPhone = normalizePhone(phone);
     const phoneCode = phoneCodeFor(normalizedPhone);
     fakeWechat.setPhone(phoneCode, phonePartsFor(normalizedPhone));
@@ -118,7 +125,14 @@ describe('Mini auth (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ phoneCode })
       .expect(expectStatus);
-    return res.body as { accountId: string; normalizedPhone: string };
+    return res.body as {
+      accountId: string;
+      normalizedPhone: string;
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+      provisional: boolean;
+    };
   }
 
   async function refresh(
@@ -161,6 +175,13 @@ describe('Mini auth (e2e)', () => {
     // Convention: bare 11-digit mobile (no country-code prefix), matching how
     // the fake gateway's phonePartsFor decomposes a non-86-prefixed number.
     expect(result.normalizedPhone).toBe('13800000000');
+    // The bind endpoint mints a fresh token pair for the bound account so the
+    // client can rotate onto it without re-running wx.login (M1 final-review
+    // fix I-1).
+    expect(result.accessToken.split('.')).toHaveLength(3);
+    expect(result.refreshToken).toEqual(expect.any(String));
+    expect(result.expiresIn).toBe(15 * 60);
+    expect(result.provisional).toBe(false);
     // The account is now bound in place (no pre-created account existed).
     const account = await db.memberAccount.findUnique({
       where: { id: login.accountId },
@@ -168,6 +189,49 @@ describe('Mini auth (e2e)', () => {
     });
     expect(account?.isProvisional).toBe(false);
     expect(account?.normalizedPhone).toBe('13800000000');
+  });
+
+  it('POST /bind-phone returns a token that reaches a private route without re-login (merge case)', async () => {
+    if (!ctx) return;
+    // Admin pre-creates a member with the target phone. The mini-program login
+    // creates a PROVISIONAL account; binding the same phone must merge the
+    // identity onto the pre-created account and return a token whose sub is
+    // the pre-created (ACTIVE) account id.
+    const precreated = await db.memberAccount.create({
+      data: {
+        normalizedPhone: '13612345678',
+        isProvisional: false,
+        status: 'ACTIVE',
+      },
+    });
+    const login = await wechatLogin('openid-bind-merge');
+    const result = await bindPhone(login.accessToken, '13612345678');
+    expect(result.accountId).toBe(precreated.id);
+
+    // The token returned by bind (NOT a re-login token) must reach a private
+    // route. Before the fix this returned 403 STUDENT_FORBIDDEN because the
+    // member's pre-bind token's sub pointed at the now-DISABLED provisional
+    // account.
+    await request(app.getHttpServer())
+      .get('/api/mini/v1/students')
+      .set('Authorization', `Bearer ${result.accessToken}`)
+      .expect(200);
+
+    // The provisional account is DISABLED and its old token is unusable: it
+    // must NOT reach the private route (proves the merge really happened and
+    // the bound token is the load-bearing credential, not the pre-bind one).
+    await request(app.getHttpServer())
+      .get('/api/mini/v1/students')
+      .set('Authorization', `Bearer ${login.accessToken}`)
+      .expect(403);
+
+    // The returned refresh token is usable for /auth/refresh on the bound
+    // account (the new RefreshSession row was persisted inside the bind tx).
+    const refreshed = await request(app.getHttpServer())
+      .post('/api/mini/v1/auth/refresh')
+      .send({ refreshToken: result.refreshToken })
+      .expect(200);
+    expect(refreshed.body.provisional).toBe(false);
   });
 
   it('POST /bind-phone requires a Bearer token (401 without it)', async () => {

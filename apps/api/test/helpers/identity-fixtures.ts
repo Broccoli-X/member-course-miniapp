@@ -58,7 +58,14 @@ export function createIdentityFixtures(deps: {
 }): {
   loginWithWechat: (fake: FakeWechatGateway, openId: string, opts?: { unionId?: string }) => Promise<LoginFixture>;
   createPrecreatedMember: (db: DbLike, phone: string, overrides?: { id?: string; status?: string }) => Promise<{ id: string; normalizedPhone: string }>;
-  bindPhone: (principal: LoginFixture | MemberPrincipal, phoneCodeOrPhone: string) => Promise<{ accountId: string; normalizedPhone: string }>;
+  bindPhone: (principal: LoginFixture | MemberPrincipal, phoneCodeOrPhone: string) => Promise<{
+    accountId: string;
+    normalizedPhone: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    provisional: boolean;
+  }>;
   accountStatus: (db: DbLike, accountId: string) => Promise<string>;
   identityOwner: (db: DbLike, openId: string) => Promise<string | null>;
   attachWechatIdentity: (accountId: string, openId: string, opts?: { unionId?: string }) => Promise<{ id: string; accountId: string; openId: string }>;
