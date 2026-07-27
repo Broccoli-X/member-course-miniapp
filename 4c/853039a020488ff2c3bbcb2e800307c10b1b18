@@ -1,0 +1,21 @@
+apps/miniapp/miniprogram/pages/my/index.ts
+  s_60a3e7e9593cd4::t_37855d799c24a5 1-36,40-43,45-123
+apps/miniapp/tests/pages/my-assets.spec.ts
+  s_60a3e7e9593cd4::t_d1572086b2fefb 1-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "4c853039a020488ff2c3bbcb2e800307c10b1b18",
+  "prompts": {},
+  "sessions": {
+    "s_60a3e7e9593cd4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4668-6cd5-77a0-aef5-dc89f4ebd924",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "夏礼华 <xlh4909@ly.com>"
+    }
+  }
+}
