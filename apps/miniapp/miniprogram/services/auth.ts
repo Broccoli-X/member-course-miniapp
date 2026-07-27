@@ -21,6 +21,12 @@ interface MemberRefreshResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  /**
+   * Whether the account was still provisional at refresh time. Used on cold
+   * launch to restore the in-memory `bound` flag (= `!provisional`) so a
+   * returning bound member is not locked out of private pages.
+   */
+  provisional: boolean;
 }
 
 interface BindPhoneResponse {
@@ -99,8 +105,14 @@ export async function refreshAccessToken(allowRedirect = false): Promise<string 
 
   try {
     const data = await refreshViaHttp(refreshToken);
+    // The server is authoritative on provisionality. On a cold launch the
+    // in-memory `bound` flag is gone (defaulted to false), so we restore it
+    // from the refresh response — otherwise returning bound members would be
+    // locked out of every private page until they re-bind. During a mid-
+    // session 401 retry this also stays correct: if the member bound their
+    // phone in another session, the new flag reflects that.
     sessionStore.setSession({
-      bound: sessionStore.isBound(),
+      bound: !data.provisional,
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,
       accountId: sessionStore.getAccountId() ?? undefined,
@@ -118,16 +130,14 @@ export async function refreshAccessToken(allowRedirect = false): Promise<string 
 /**
  * Re-run the refresh flow on cold launch using only the persisted refresh
  * token. Returns true if a session was restored, false otherwise (the caller
- * routes to login when false). Does NOT trust any in-memory bound flag — the
- * server is the source of truth on provisionality.
+ * routes to login when false). The server is the source of truth on
+ * provisionality: {@link refreshAccessToken} restores `bound = !provisional`
+ * from the refresh response, so a returning bound member is NOT locked out of
+ * private pages.
  */
 export async function refreshSession(): Promise<boolean> {
   const accessToken = await refreshAccessToken();
   if (!accessToken) return false;
-  // After refresh we have a valid access token but `bound` may be stale (it
-  // was in-memory only). Members must complete phone-bind before private
-  // access; if the refresh came back without a confirmed bind we leave
-  // `bound === false` and the navigation policy will route accordingly.
   return sessionStore.getAccessToken() !== null;
 }
 

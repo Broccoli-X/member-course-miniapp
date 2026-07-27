@@ -1,4 +1,5 @@
 import { bindPhone } from '../../services/auth';
+import { isRedirectedError } from '../../services/http';
 
 interface PageInstance {
   setData(data: Record<string, unknown>): void;
@@ -43,10 +44,12 @@ Page({
       await bindPhone(e.detail.code);
       wx.reLaunch({ url: '/pages/students/index' });
     } catch (err) {
-      wx.showToast({
-        title: (err as Error)?.message ?? '手机号绑定失败',
-        icon: 'none',
-      });
+      if (!isRedirectedError(err)) {
+        wx.showToast({
+          title: (err as Error)?.message ?? '手机号绑定失败',
+          icon: 'none',
+        });
+      }
     } finally {
       this.setData({ loading: false });
     }

@@ -1,4 +1,4 @@
-import { request, ApiError } from '../../services/http';
+import { request, ApiError, isRedirectedError } from '../../services/http';
 
 interface MemberStudentView {
   student: { id: string; displayName: string; birthDate: string | null };
@@ -71,10 +71,12 @@ Page({
       });
     } catch (err) {
       this.setData({ mode: 'edit', studentId: id });
-      wx.showToast({
-        title: err instanceof ApiError ? err.message : '加载学员失败',
-        icon: 'none',
-      });
+      if (!isRedirectedError(err)) {
+        wx.showToast({
+          title: err instanceof ApiError ? err.message : '加载学员失败',
+          icon: 'none',
+        });
+      }
     }
   },
 
@@ -123,10 +125,12 @@ Page({
       }
       wx.navigateBack();
     } catch (err) {
-      wx.showToast({
-        title: err instanceof ApiError ? err.message : '保存失败',
-        icon: 'none',
-      });
+      if (!isRedirectedError(err)) {
+        wx.showToast({
+          title: err instanceof ApiError ? err.message : '保存失败',
+          icon: 'none',
+        });
+      }
     } finally {
       this.setData({ submitting: false });
     }

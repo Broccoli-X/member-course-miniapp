@@ -109,6 +109,7 @@ describe('auth flow', () => {
               accessToken: 'new-access',
               refreshToken: 'new-refresh',
               expiresIn: 900,
+              provisional: false,
             },
           },
           header: {},
@@ -124,6 +125,84 @@ describe('auth flow', () => {
     expect(sessionStore.getAccessToken()).toBe('new-access');
     // Rotated refresh token is persisted.
     expect(mock.storage[REFRESH_TOKEN_KEY]).toBe('new-refresh');
+  });
+
+  it('cold-launch refresh with provisional:false restores bound and opens private pages', async () => {
+    const { sessionStore } = await import('../miniprogram/stores/session-store');
+    const { refreshSession } = await import('../miniprogram/services/auth');
+    const { canOpen } = await import('../miniprogram/services/navigation');
+
+    // Cold launch: in-memory bound defaults to false, only refresh token on disk.
+    mock.storage[REFRESH_TOKEN_KEY] = 'refresh-bound';
+    expect(sessionStore.isBound()).toBe(false);
+    mock.wx.request.mockImplementation((opts: Record<string, unknown>) => {
+      if (String(opts.url).endsWith('/api/mini/v1/auth/refresh')) {
+        const res = {
+          statusCode: 200,
+          data: {
+            code: 0,
+            message: 'ok',
+            data: {
+              accessToken: 'bound-access',
+              refreshToken: 'bound-refresh',
+              expiresIn: 900,
+              // Server says the account is bound (not provisional).
+              provisional: false,
+            },
+          },
+          header: {},
+          cookies: [],
+        };
+        if (typeof opts.success === 'function') opts.success(res);
+      }
+      return {};
+    });
+
+    const restored = await refreshSession();
+    expect(restored).toBe(true);
+    // Returning bound member is NOT locked out: bound restored from the flag.
+    expect(sessionStore.isBound()).toBe(true);
+    expect(canOpen('/pages/students/index')).toBe(true);
+    expect(canOpen('/pages/my/index')).toBe(true);
+  });
+
+  it('cold-launch refresh with provisional:true leaves bound=false and gates private pages', async () => {
+    const { sessionStore } = await import('../miniprogram/stores/session-store');
+    const { refreshSession } = await import('../miniprogram/services/auth');
+    const { canOpen } = await import('../miniprogram/services/navigation');
+
+    mock.storage[REFRESH_TOKEN_KEY] = 'refresh-provisional';
+    mock.wx.request.mockImplementation((opts: Record<string, unknown>) => {
+      if (String(opts.url).endsWith('/api/mini/v1/auth/refresh')) {
+        const res = {
+          statusCode: 200,
+          data: {
+            code: 0,
+            message: 'ok',
+            data: {
+              accessToken: 'provisional-access',
+              refreshToken: 'provisional-refresh',
+              expiresIn: 900,
+              // Account still provisional — member must bind a phone.
+              provisional: true,
+            },
+          },
+          header: {},
+          cookies: [],
+        };
+        if (typeof opts.success === 'function') opts.success(res);
+      }
+      return {};
+    });
+
+    const restored = await refreshSession();
+    expect(restored).toBe(true);
+    expect(sessionStore.isBound()).toBe(false);
+    // Private pages stay gated until the member binds a phone.
+    expect(canOpen('/pages/students/index')).toBe(false);
+    expect(canOpen('/pages/my/index')).toBe(false);
+    // ...but public catalog pages remain reachable.
+    expect(canOpen('/pages/courses/index')).toBe(true);
   });
 
   it('clears session and surfaces refresh failure', async () => {
@@ -153,5 +232,69 @@ describe('auth flow', () => {
     expect(restored).toBe(false);
     expect(sessionStore.isBound()).toBe(false);
     expect(mock.storage[REFRESH_TOKEN_KEY]).toBeUndefined();
+  });
+
+  it('http layer marks ApiError redirected=true after a 401-refresh-failure redirect', async () => {
+    const { sessionStore } = await import('../miniprogram/stores/session-store');
+    const { request, ApiError, isRedirectedError } = await import(
+      '../miniprogram/services/http'
+    );
+
+    // A bound member with an access token that the server now rejects.
+    sessionStore.setSession({
+      bound: true,
+      accessToken: 'expired-access',
+      refreshToken: 'dead-refresh',
+    });
+    mock.wx.request.mockImplementation((opts: Record<string, unknown>) => {
+      const res = {
+        statusCode: 401,
+        data: { code: 'UNAUTHORIZED', message: 'bad token', traceId: 't1' },
+        header: {},
+        cookies: [],
+      };
+      if (typeof opts.success === 'function') opts.success(res);
+      return {};
+    });
+    // reLaunch must be available for the redirect.
+    mock.wx.reLaunch.mockImplementation(() => {});
+
+    let caught: unknown = null;
+    try {
+      await request({ path: '/api/mini/v1/students' });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(isRedirectedError(caught)).toBe(true);
+    // The http layer redirected to login and cleared the session.
+    expect(mock.wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/login/index' });
+    expect(sessionStore.getAccessToken()).toBe(null);
+  });
+
+  it('isRedirectedError is false for ordinary (non-redirect) ApiErrors', async () => {
+    const { request, ApiError, isRedirectedError } = await import(
+      '../miniprogram/services/http'
+    );
+    mock.wx.request.mockImplementation((opts: Record<string, unknown>) => {
+      // A 403 (not a 401 session-expiry) does not trigger a redirect.
+      const res = {
+        statusCode: 403,
+        data: { code: 'STUDENT_FORBIDDEN', message: 'no access', traceId: 't2' },
+        header: {},
+        cookies: [],
+      };
+      if (typeof opts.success === 'function') opts.success(res);
+      return {};
+    });
+    let caught: unknown = null;
+    try {
+      await request({ path: '/api/mini/v1/students/xyz', auth: false });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(isRedirectedError(caught)).toBe(false);
+    expect(mock.wx.reLaunch).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { request, ApiError } from '../../services/http';
+import { request, ApiError, isRedirectedError } from '../../services/http';
 import { currentStudentStore } from '../../stores/current-student-store';
 
 interface MemberStudentView {
@@ -48,8 +48,12 @@ Page({
         currentId: currentStudentStore.currentId,
       });
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : '加载学员失败';
-      wx.showToast({ title: message, icon: 'none' });
+      // If the http layer already redirected to login (session expired),
+      // suppress the toast — it would race with the navigation.
+      if (!isRedirectedError(err)) {
+        const message = err instanceof ApiError ? err.message : '加载学员失败';
+        wx.showToast({ title: message, icon: 'none' });
+      }
       this.setData({ students: [] });
     } finally {
       this.setData({ loading: false });

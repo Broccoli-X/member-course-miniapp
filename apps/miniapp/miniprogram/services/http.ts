@@ -40,6 +40,13 @@ export class ApiError extends Error {
   readonly traceId?: string;
   /** Optional structured details from the envelope. */
   readonly details?: Record<string, unknown>;
+  /**
+   * True when the http layer already cleared the session and redirected to
+   * login before throwing this error. Page catch blocks should suppress any
+   * `wx.showToast` in this case — the toast would flash on the login page (or
+   * be dropped) because navigation is already in flight.
+   */
+  readonly redirected?: boolean;
 
   constructor(
     message: string,
@@ -47,6 +54,7 @@ export class ApiError extends Error {
     statusCode: number,
     traceId?: string,
     details?: Record<string, unknown>,
+    redirected?: boolean,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -54,7 +62,17 @@ export class ApiError extends Error {
     this.statusCode = statusCode;
     this.traceId = traceId;
     this.details = details;
+    this.redirected = redirected;
   }
+}
+
+/**
+ * True iff `err` is an {@link ApiError} thrown after the http layer already
+ * cleared the session and kicked off a redirect to login. Page catch blocks
+ * use this to suppress a redundant (and racy) `wx.showToast`.
+ */
+export function isRedirectedError(err: unknown): boolean {
+  return err instanceof ApiError && err.redirected === true;
 }
 
 interface RequestOpts {
@@ -90,7 +108,7 @@ function buildUrl(path: string): string {
   return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
 }
 
-function toApiError(statusCode: number, body: unknown): ApiError {
+function toApiError(statusCode: number, body: unknown, redirected = false): ApiError {
   const envelope = (body ?? {}) as {
     code?: string;
     message?: string;
@@ -103,6 +121,7 @@ function toApiError(statusCode: number, body: unknown): ApiError {
     statusCode,
     envelope.traceId,
     envelope.details,
+    redirected,
   );
 }
 
@@ -165,10 +184,12 @@ async function requestWithRetry<T>(
     if (refreshed) {
       return requestWithRetry<T>(path, method, data, auth, false);
     }
-    // Refresh failed: clear session and route to login.
+    // Refresh failed: clear session and route to login. Mark the thrown error
+    // so page catch blocks can suppress their toast (it would race with the
+    // navigation and flash on the login page, or be dropped entirely).
     sessionStore.clearSession();
     redirectToLogin();
-    throw toApiError(res.statusCode, res.data);
+    throw toApiError(res.statusCode, res.data, true);
   }
 
   throw toApiError(res.statusCode, res.data);

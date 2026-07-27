@@ -1,4 +1,5 @@
 import { wechatLogin } from '../../services/auth';
+import { isRedirectedError } from '../../services/http';
 
 interface PageInstance {
   setData(data: Record<string, unknown>): void;
@@ -41,10 +42,14 @@ Page({
         wx.reLaunch({ url: '/pages/students/index' });
       }
     } catch (err) {
-      wx.showToast({
-        title: (err as Error)?.message ?? '登录失败',
-        icon: 'none',
-      });
+      // Suppress the toast if the http layer already redirected (session
+      // expired mid-flow); the toast would flash on the wrong page.
+      if (!isRedirectedError(err)) {
+        wx.showToast({
+          title: (err as Error)?.message ?? '登录失败',
+          icon: 'none',
+        });
+      }
     } finally {
       this.setData({ loading: false });
     }
