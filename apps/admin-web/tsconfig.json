@@ -11,6 +11,12 @@
       "@member-course/contracts": ["../../packages/contracts/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.d.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts"
+  ],
   "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
 }

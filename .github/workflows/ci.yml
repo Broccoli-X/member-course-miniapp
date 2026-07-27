@@ -1,0 +1,135 @@
+name: ci
+
+on:
+  push:
+    branches: [main, codex/member-course-mvp]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same ref when a new commit lands.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: M1 verification gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    env:
+      # The MySQL service container (see `services` below) is reachable on the
+      # `mysql` host. CI uses an EMPTY root password and a fresh DB so each run
+      # starts from a clean schema; `prisma migrate deploy` (in the steps below)
+      # applies all migrations before any test runs.
+      TEST_DATABASE_URL: mysql://root@127.0.0.1:3306/member_course_test
+      DATABASE_URL: mysql://root@127.0.0.1:3306/member_course_test
+      JWT_SECRET: ci-jwt-secret-not-secret
+      RUN_INTEGRATION: '1'
+      # The Prisma seed reads ADMIN_SEED_USERNAME / ADMIN_SEED_PASSWORD; the
+      # Playwright suite reads ADMIN_USERNAME / ADMIN_PASSWORD to fill the
+      # login form. Both pairs carry the same bootstrap admin.
+      ADMIN_SEED_USERNAME: admin
+      ADMIN_SEED_PASSWORD: Admin@123456
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Admin@123456
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
+          MYSQL_DATABASE: member_course_test
+        ports:
+          - 3306:3306
+        # Mark the service ready once MySQL accepts connections. The default
+        # health check (mysqladmin ping) requires the client on the image; this
+        # form uses the bundled mysqladmin against the server it just started.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply Prisma migrations to the CI MySQL
+        run: pnpm --filter @member-course/api prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+      - name: Generate Prisma client
+        run: pnpm --filter @member-course/api prisma generate --schema apps/api/prisma/schema.prisma
+
+      - name: Validate Prisma schema
+        run: pnpm --filter @member-course/api prisma validate --schema apps/api/prisma/schema.prisma
+
+      - name: Lint (all workspaces)
+        run: pnpm lint
+
+      - name: Typecheck (all workspaces)
+        run: pnpm typecheck
+
+      - name: Unit tests (all workspaces)
+        run: pnpm test
+
+      - name: API integration tests (real MySQL)
+        run: pnpm --filter @member-course/api test:integration
+
+      - name: API e2e journey (real MySQL)
+        run: pnpm --filter @member-course/api test:e2e
+
+      - name: Build (all workspaces)
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @member-course/admin-web exec playwright install --with-deps chromium
+
+      - name: Start API for admin-web e2e
+        run: |
+          pnpm --filter @member-course/api start &
+          echo $! > /tmp/api.pid
+          # Wait until the API health endpoint responds.
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:3000/api/health >/dev/null; then
+              echo "API is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become ready"; exit 1
+
+      - name: Seed admin user for admin-web e2e
+        run: pnpm --filter @member-course/api prisma db seed --schema apps/api/prisma/schema.prisma
+
+      - name: admin-web Playwright e2e (live API + MySQL)
+        run: pnpm --filter @member-course/admin-web test:e2e
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f /tmp/api.pid ]; then kill "$(cat /tmp/api.pid)" 2>/dev/null || true; fi
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/admin-web/playwright-report/
+          retention-days: 7
+
+      - name: Whitespace / conflict-marker check
+        run: git diff --check

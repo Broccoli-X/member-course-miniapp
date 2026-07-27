@@ -241,8 +241,12 @@ export class OfflineOrderService {
       const expiresOn = calculateExpiryDate(confirmedAt, item.validDaysSnapshot - 1);
 
       // 1. Create the CoursePackage for this item on the SAME tx. The package
-      //    starts fully available (granted === available === hoursSnapshot);
-      //    the grant below will land the units and reconcile the balance.
+      //    starts with `granted` = hoursSnapshot (the total authorised by this
+      //    order item) but `available` = 0: per the M1 invariant, balance
+      //    changes flow ONLY through append-only postings. The grant below
+      //    lands the units into `available` (package + summary balance) so the
+      //    package reconciles against its allocation history. Pre-seeding
+      //    `available` here would double-count the grant.
       const pkg = await tx.coursePackage.create({
         data: {
           studentId: item.studentId,
@@ -252,7 +256,7 @@ export class OfflineOrderService {
           startsOn: startsOnDate,
           expiresOn: new Date(`${expiresOn}T00:00:00.000Z`),
           granted: item.hoursSnapshot,
-          available: item.hoursSnapshot,
+          available: 0,
           reserved: 0,
           consumed: 0,
           expired: 0,

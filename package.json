@@ -9,6 +9,8 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:integration": "pnpm --filter @member-course/api test:integration",
+    "test:e2e": "pnpm --filter @member-course/api test:e2e",
     "build": "pnpm -r build"
   },
   "devDependencies": {
