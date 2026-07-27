@@ -152,6 +152,12 @@ export interface MemberRefreshResponse {
   readonly accessToken: string;
   readonly refreshToken: string;
   readonly expiresIn: number;
+  /**
+   * Whether the account was still provisional at refresh time. The
+   * mini-program client uses this on cold launch to restore its in-memory
+   * `bound` flag (= `!provisional`) without requiring an extra request.
+   */
+  readonly provisional: boolean;
 }
 
 /** Body of `POST /api/mini/v1/auth/logout`. */

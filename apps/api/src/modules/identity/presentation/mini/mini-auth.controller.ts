@@ -95,6 +95,9 @@ export class MiniAuthController {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       expiresIn: result.expiresIn,
+      // Echo the account's provisionality so the mini-program can restore its
+      // in-memory `bound` flag on cold launch (bound = !provisional).
+      provisional: result.provisional,
     };
     return response;
   }

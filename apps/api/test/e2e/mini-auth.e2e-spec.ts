@@ -124,12 +124,22 @@ describe('Mini auth (e2e)', () => {
   async function refresh(
     refreshToken: string,
     expectStatus = 200,
-  ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    provisional: boolean;
+  }> {
     const res = await request(app.getHttpServer())
       .post('/api/mini/v1/auth/refresh')
       .send({ refreshToken })
       .expect(expectStatus);
-    return res.body as { accessToken: string; refreshToken: string; expiresIn: number };
+    return res.body as {
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+      provisional: boolean;
+    };
   }
 
   // ── Tests ──────────────────────────────────────────────────────────────
@@ -211,6 +221,25 @@ describe('Mini auth (e2e)', () => {
     expect(refreshed.accessToken.split('.')).toHaveLength(3);
     // Reuse of the now-revoked token → 401.
     await refresh(login.refreshToken, 401);
+  });
+
+  it('POST /refresh echoes provisional=true for an unbound (provisional) account', async () => {
+    if (!ctx) return;
+    const login = await wechatLogin('openid-e2e-provisional');
+    expect(login.provisional).toBe(true);
+    const refreshed = await refresh(login.refreshToken);
+    // The account has not bound a phone, so provisionality is preserved.
+    expect(refreshed.provisional).toBe(true);
+  });
+
+  it('POST /refresh echoes provisional=false after the member binds a phone', async () => {
+    if (!ctx) return;
+    const login = await wechatLogin('openid-e2e-bound');
+    await bindPhone(login.accessToken, '13600000000');
+    const refreshed = await refresh(login.refreshToken);
+    // A bound account must report provisional=false so the mini-program can
+    // restore its in-memory `bound` flag on cold launch.
+    expect(refreshed.provisional).toBe(false);
   });
 
   it('serializes concurrent refreshes of one live token to one winner', async () => {

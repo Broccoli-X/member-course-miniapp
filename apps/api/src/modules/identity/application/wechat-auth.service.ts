@@ -25,6 +25,13 @@ export interface MemberRefreshResult {
   readonly accessToken: string;
   readonly refreshToken: string;
   readonly expiresIn: number;
+  /**
+   * Whether the account was still provisional (`isProvisional`) at refresh
+   * time. The mini-program client keeps `bound` in memory only, so on a cold
+   * launch it relies on this flag to restore `bound = !provisional` and avoid
+   * locking returning bound users out of every private page.
+   */
+  readonly provisional: boolean;
 }
 
 /** Status values the schema uses for `MemberAccount.status`. */
@@ -219,6 +226,7 @@ export class WechatAuthService {
         accessToken,
         refreshToken: newRefresh.token,
         expiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
+        provisional: account.isProvisional,
       };
     });
   }
