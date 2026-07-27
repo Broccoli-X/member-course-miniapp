@@ -24,7 +24,14 @@ describe('bind-phone page', () => {
           data: {
             code: 0,
             message: 'ok',
-            data: { accountId: 'acc-1', normalizedPhone: '13800000000' },
+            data: {
+              accountId: 'acc-1',
+              normalizedPhone: '13800000000',
+              accessToken: 'bind-access-token',
+              refreshToken: 'bind-refresh-token',
+              expiresIn: 900,
+              provisional: false,
+            },
           },
           header: {},
           cookies: [],
@@ -42,6 +49,12 @@ describe('bind-phone page', () => {
 
     const { sessionStore } = await import('../../miniprogram/stores/session-store');
     expect(sessionStore.isBound()).toBe(true);
+    // M1 final-review fix I-1: the bind response carries a fresh token pair
+    // signed for the bound account. setSession MUST rotate onto them so the
+    // next private request (which uses getAccessToken) carries the bound token.
+    expect(sessionStore.getAccessToken()).toBe('bind-access-token');
+    expect(sessionStore.getRefreshToken()).toBe('bind-refresh-token');
+    expect(sessionStore.getAccountId()).toBe('acc-1');
   });
 
   it('navigates to the students list after a successful bind', async () => {
@@ -52,7 +65,14 @@ describe('bind-phone page', () => {
           data: {
             code: 0,
             message: 'ok',
-            data: { accountId: 'acc-1', normalizedPhone: '13800000000' },
+            data: {
+              accountId: 'acc-1',
+              normalizedPhone: '13800000000',
+              accessToken: 'bind-access-token',
+              refreshToken: 'bind-refresh-token',
+              expiresIn: 900,
+              provisional: false,
+            },
           },
           header: {},
           cookies: [],
@@ -79,7 +99,14 @@ describe('bind-phone page', () => {
           data: {
             code: 0,
             message: 'ok',
-            data: { accountId: 'acc-1', normalizedPhone: '13800000000' },
+            data: {
+              accountId: 'acc-1',
+              normalizedPhone: '13800000000',
+              accessToken: 'bind-access-token',
+              refreshToken: 'bind-refresh-token',
+              expiresIn: 900,
+              provisional: false,
+            },
           },
           header: {},
           cookies: [],

@@ -32,6 +32,10 @@ interface MemberRefreshResponse {
 interface BindPhoneResponse {
   accountId: string;
   normalizedPhone: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  provisional: boolean;
 }
 
 /**
@@ -60,8 +64,13 @@ export async function wechatLogin(code: string): Promise<WechatLoginResponse> {
 /**
  * Forward the WeChat `getPhoneNumber` code to the bind endpoint. After bind the
  * member is considered `bound`; the server may have merged accounts (returning
- * a different `accountId`) — setSession handles the rotation/clear of any
- * previously persisted refresh token.
+ * a different `accountId`) AND it always returns a fresh access + refresh token
+ * pair signed for the final bound account. We MUST rotate both tokens onto the
+ * session: in the merge case the pre-bind access token's `sub` points at the
+ * now-DISABLED provisional account, so the next private request would 403
+ * `STUDENT_FORBIDDEN` (not 401 → no auto-refresh). The pre-bind refresh token
+ * is likewise stale in the merge case. `setSession` persists the new refresh
+ * token (and clears the old persisted one when the account changed).
  */
 export async function bindPhone(phoneCode: string): Promise<BindPhoneResponse> {
   const data = await request<BindPhoneResponse>({
@@ -71,7 +80,8 @@ export async function bindPhone(phoneCode: string): Promise<BindPhoneResponse> {
   });
   sessionStore.setSession({
     bound: true,
-    accessToken: sessionStore.getAccessToken() ?? '',
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
     accountId: data.accountId,
   });
   return data;
