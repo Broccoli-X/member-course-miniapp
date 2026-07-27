@@ -16,16 +16,11 @@ function onLogout(): void {
   // best-effort server call, so we do NOT await it here — a slow or failing
   // network request must not leave the user stuck on a protected page.
   void auth.logout();
-  // Redirect to login. vue-router resolves the navigation asynchronously
-  // (its guard queue spans many microtasks); resolve the target eagerly and
-  // reflect it on the current route so observers see "login" before the
-  // navigation promise settles, then let the real navigation finalize it
-  // (renders LoginView, updates history). The eager reflection is what makes
-  // the logout transition observable within a single test microtask batch.
-  const login = router.resolve({ name: 'login' });
-  (
-    router.currentRoute as unknown as { value: typeof router.currentRoute.value }
-  ).value = login as typeof router.currentRoute.value;
+  // Redirect to login. The navigation is handled entirely by vue-router's
+  // normal async guard queue; we intentionally do NOT mutate its internal
+  // currentRoute ref — letting the router own that state keeps history and
+  // the rendered view consistent (no transient LoginView-in-AdminLayout
+  // shell). Tests that need to observe the post-logout route await the push.
   void router.push({ name: 'login' });
 }
 </script>

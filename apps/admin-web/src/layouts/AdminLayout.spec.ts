@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory } from 'vue-router';
 import AdminLayout from './AdminLayout.vue';
@@ -63,6 +63,14 @@ describe('AdminLayout', () => {
 
     await wrapper.get('[data-testid="logout"]').trigger('click');
     await router.isReady();
+    // onLogout fires router.push({ name: 'login' }) without awaiting it, and
+    // vue-router's guard queue settles across several microtasks under jsdom.
+    // Drain those microtasks (flushPromises twice + a macrotask) so the
+    // assertion sees the finalised route rather than relying on any
+    // synchronous mutation of router internals.
+    await flushPromises();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(auth.accessToken).toBeNull();
     expect(auth.refreshToken).toBeNull();
     expect(router.currentRoute.value.name).toBe('login');
