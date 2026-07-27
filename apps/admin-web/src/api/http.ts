@@ -75,6 +75,12 @@ export interface HttpRequestOptions {
   readonly auth?: boolean;
   /** Set true to opt out of the transparent 401-retry (used by refresh itself). */
   readonly skipRefresh?: boolean;
+  /**
+   * Extra request headers (merged on top of the JSON/auth defaults). Used to
+   * pass the `Idempotency-Key` header on confirm/reverse/void calls so a
+   * doubled submit executes the work exactly once.
+   */
+  readonly headers?: Record<string, string>;
 }
 
 const JSON_HEADERS: Record<string, string> = {
@@ -161,12 +167,18 @@ export async function request<T>(path: string, options: HttpRequestOptions = {})
     body,
     auth = true,
     skipRefresh = false,
+    headers: extraHeaders,
   } = options;
 
   const headers: Record<string, string> = { ...JSON_HEADERS };
   if (auth && tokenProvider) {
     const at = tokenProvider.getAccessToken();
     if (at) headers.Authorization = `Bearer ${at}`;
+  }
+  // Caller-supplied headers win over the JSON/auth defaults (e.g. the
+  // Idempotency-Key that makes confirm/reverse replay-safe).
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) headers[k] = v;
   }
 
   const init: RequestInit = { method, headers };

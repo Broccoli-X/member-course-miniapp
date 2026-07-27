@@ -9,6 +9,10 @@
  *       - /courses                course list
  *       - /courses/create         create course
  *       - /courses/:id            edit course
+ *       - /orders                 offline order list
+ *       - /orders/create          create offline order draft
+ *       - /orders/:id             order detail (confirm/void/reverse)
+ *       - /hours                  lesson-hour management (ledger + adjustments)
  *
  * The navigation guard redirects any unauthenticated request for a protected
  * route to /login (preserving the intended destination in `query.redirect`).
@@ -27,6 +31,10 @@ import MemberListView from '../features/members/MemberListView.vue';
 import MemberDetailView from '../features/members/MemberDetailView.vue';
 import CourseListView from '../features/catalog/CourseListView.vue';
 import CourseEditView from '../features/catalog/CourseEditView.vue';
+import OrderListView from '../features/orders/OrderListView.vue';
+import OrderCreateView from '../features/orders/OrderCreateView.vue';
+import OrderDetailView from '../features/orders/OrderDetailView.vue';
+import HourManagementView from '../features/hours/HourManagementView.vue';
 // Import the store factory (calling it lazily inside the guard) — referencing the
 // function at module load is safe; only *calling* it before Pinia is active
 // throws. Keeping a synchronous import avoids an async gap in the navigation
@@ -74,6 +82,27 @@ const routes: RouteRecordRaw[] = [
         name: 'course-edit',
         component: CourseEditView,
         props: true,
+      },
+      {
+        path: 'orders',
+        name: 'orders',
+        component: OrderListView,
+      },
+      {
+        path: 'orders/create',
+        name: 'order-create',
+        component: OrderCreateView,
+      },
+      {
+        path: 'orders/:id',
+        name: 'order-detail',
+        component: OrderDetailView,
+        props: true,
+      },
+      {
+        path: 'hours',
+        name: 'hours',
+        component: HourManagementView,
       },
     ],
   },

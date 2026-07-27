@@ -22,7 +22,7 @@ describe('AdminLayout', () => {
     expect(router.currentRoute.value.name).toBe('login');
   });
 
-  it('renders the protected shell with only the M1 navigation sections', async () => {
+  it('renders the protected shell with all M1 navigation sections', async () => {
     const router = createAdminRouter(createMemoryHistory());
     const auth = useAuthStore();
     auth.accessToken = 'token';
@@ -40,9 +40,9 @@ describe('AdminLayout', () => {
     const navText = wrapper.find('[data-testid="admin-nav"]').text();
     expect(navText).toContain('会员学员');
     expect(navText).toContain('课程课包');
-    // Task 13 adds these — they MUST NOT appear in M1.
-    expect(navText).not.toContain('线下订单');
-    expect(navText).not.toContain('课时管理');
+    // Task 13 adds offline orders + lesson-hour management navigation.
+    expect(navText).toContain('线下订单');
+    expect(navText).toContain('课时管理');
   });
 
   it('clears tokens and returns to login on logout', async () => {

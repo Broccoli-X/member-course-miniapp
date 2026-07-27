@@ -5,10 +5,12 @@ import { useAuthStore } from '../stores/auth';
 const router = useRouter();
 const auth = useAuthStore();
 
-// M1 navigation: members + catalog ONLY. Task 13 adds orders/hours.
+// M1 navigation. Task 13 adds offline orders + lesson-hour management.
 const navItems = [
   { name: 'members', label: '会员学员', path: '/members' },
   { name: 'courses', label: '课程课包', path: '/courses' },
+  { name: 'orders', label: '线下订单', path: '/orders' },
+  { name: 'hours', label: '课时管理', path: '/hours' },
 ];
 
 function onLogout(): void {
