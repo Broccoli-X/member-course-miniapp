@@ -1,0 +1,73 @@
+.packages-page {
+  padding: 24rpx;
+}
+.package-card {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+.package-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+.package-course {
+  font-size: 30rpx;
+  color: #333333;
+  font-weight: 500;
+}
+.package-status {
+  font-size: 24rpx;
+  color: #4C7DFF;
+}
+.package-dates {
+  display: flex;
+  gap: 32rpx;
+  padding: 12rpx 0;
+  border-top: 2rpx solid #f0f0f0;
+}
+.date-row {
+  display: flex;
+  flex-direction: column;
+}
+.date-label {
+  font-size: 22rpx;
+  color: #999999;
+}
+.date-value {
+  font-size: 26rpx;
+  color: #333333;
+  margin-top: 4rpx;
+}
+.package-buckets {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16rpx;
+  border-top: 2rpx solid #f0f0f0;
+}
+.bucket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+.bucket-value {
+  font-size: 32rpx;
+  color: #333333;
+  font-weight: 600;
+}
+.bucket-label {
+  font-size: 22rpx;
+  color: #999999;
+  margin-top: 6rpx;
+}
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 160rpx 0;
+  color: #999999;
+  font-size: 28rpx;
+}

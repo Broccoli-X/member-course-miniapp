@@ -1,0 +1,12 @@
+<view class="student-switcher" wx:if="{{students.length > 0}}">
+  <view class="switcher-label">当前学员</view>
+  <scroll-view class="switcher-list" scroll-x="{{true}}">
+    <view
+      class="switcher-chip {{currentId === item.id ? 'switcher-chip--active' : ''}}"
+      wx:for="{{students}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onPickStudent"
+    >{{item.displayName}}</view>
+  </scroll-view>
+</view>

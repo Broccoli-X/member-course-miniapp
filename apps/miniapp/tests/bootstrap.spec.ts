@@ -13,6 +13,10 @@ describe('miniapp bootstrap', () => {
       'pages/bind-phone/index',
       'pages/students/index',
       'pages/student-edit/index',
+      'pages/orders/index',
+      'pages/order-detail/index',
+      'pages/packages/index',
+      'pages/hour-transactions/index',
       'pages/my/index',
     ]);
   });

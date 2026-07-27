@@ -1,0 +1,49 @@
+<view class="packages-page">
+  <student-switcher
+    wx:if="{{students.length > 0}}"
+    students="{{students}}"
+    current-id="{{studentId}}"
+    bind:change="onStudentChange"
+  ></student-switcher>
+
+  <view wx:if="{{packages.length > 0}}">
+    <view class="package-card" wx:for="{{packages}}" wx:key="id">
+      <view class="package-head">
+        <text class="package-course">课程 {{item.courseId}}</text>
+        <text class="package-status">{{item.status}}</text>
+      </view>
+      <view class="package-dates">
+        <view class="date-row">
+          <text class="date-label">生效</text>
+          <text class="date-value">{{item.startsOn}}</text>
+        </view>
+        <view class="date-row">
+          <text class="date-label">到期</text>
+          <text class="date-value">{{item.expiresOn}}</text>
+        </view>
+      </view>
+      <view class="package-buckets">
+        <view class="bucket">
+          <text class="bucket-value">{{item.available}}</text>
+          <text class="bucket-label">可用</text>
+        </view>
+        <view class="bucket">
+          <text class="bucket-value">{{item.reserved}}</text>
+          <text class="bucket-label">预留</text>
+        </view>
+        <view class="bucket">
+          <text class="bucket-value">{{item.consumed}}</text>
+          <text class="bucket-label">已消</text>
+        </view>
+        <view class="bucket">
+          <text class="bucket-value">{{item.expired}}</text>
+          <text class="bucket-label">已过期</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:elif="{{!loading}}">
+    <text>暂无课时包</text>
+  </view>
+</view>

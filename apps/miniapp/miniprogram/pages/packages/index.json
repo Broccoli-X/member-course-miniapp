@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "student-switcher": "../../components/student-switcher/index"
+  },
+  "navigationBarTitleText": "课时包"
+}

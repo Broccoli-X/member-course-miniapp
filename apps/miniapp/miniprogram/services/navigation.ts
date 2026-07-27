@@ -27,6 +27,10 @@ const PUBLIC_PAGES: ReadonlySet<string> = new Set<string>([
 const PRIVATE_PAGES: ReadonlySet<string> = new Set<string>([
   'pages/students/index',
   'pages/student-edit/index',
+  'pages/orders/index',
+  'pages/order-detail/index',
+  'pages/packages/index',
+  'pages/hour-transactions/index',
   'pages/my/index',
 ]);
 

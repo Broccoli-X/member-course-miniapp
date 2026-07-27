@@ -8,13 +8,37 @@
  * storage shim. `vi.resetModules()` is used so the page module re-runs its
  * top-level `Page({...})` against the fresh capture every time.
  */
-type PageConfig = Record<string, (...args: unknown[]) => unknown> & {
+// Input shape accepted by the capturing `Page()`/`Component()` globals: data
+// is optional because some configs construct it lazily.
+type InputConfig = Record<string, (...args: unknown[]) => unknown> & {
   data?: Record<string, unknown>;
+};
+
+// Captured shape: `ensureSetData` always installs a `data` object before
+// capture, so this is declared required (not `data?`) to save every spec from
+// a non-null assert on `page.data`.
+type PageConfig = Record<string, (...args: unknown[]) => unknown> & {
+  data: Record<string, unknown>;
+};
+
+/**
+ * Captured `Component({...})` config. Mirrors {@link PageConfig}; lifecycle
+ * methods (`attached`, `detached`) and event handlers are captured here so a
+ * component test can drive them against an in-memory instance. `setData` is
+ * auto-installed to merge into `data`, matching the page capture behaviour.
+ */
+type ComponentConfig = Record<string, (...args: unknown[]) => unknown> & {
+  data: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 };
 
 export interface WxMock {
   storage: Record<string, unknown>;
-  captured: { page: PageConfig | null; app: unknown | null };
+  captured: {
+    page: PageConfig | null;
+    app: unknown | null;
+    component: ComponentConfig | null;
+  };
   wx: {
     setStorageSync: ReturnType<typeof vi.fn>;
     getStorageSync: ReturnType<typeof vi.fn>;
@@ -40,24 +64,45 @@ export interface WxMock {
  */
 export function installWxGlobals(): WxMock {
   const storage: Record<string, unknown> = {};
-  const captured: WxMock['captured'] = { page: null, app: null };
+  const captured: WxMock['captured'] = {
+    page: null,
+    app: null,
+    component: null,
+  };
 
-  (globalThis as { Page?: unknown }).Page = (config: PageConfig): void => {
-    // Install a default no-op `setData` so pages that call `this.setData`
-    // during lifecycle hooks (login, bind-phone) work even when a test doesn't
-    // override it with a spy. Tests that assert on setData replace this.
-    const instance = config as PageConfig & {
-      setData?: (data: Record<string, unknown>) => void;
-    };
+  // Install a default no-op `setData` so pages/components that call
+  // `this.setData` during lifecycle hooks work even when a test doesn't
+  // override it with a spy. Tests that assert on setData replace this.
+  function ensureSetData(instance: { setData?: unknown; data?: unknown }): void {
     if (typeof instance.setData !== 'function') {
       instance.setData = (data: Record<string, unknown>) => {
         Object.assign((instance.data ??= {}), data);
       };
     }
-    captured.page = instance;
+  }
+
+  (globalThis as { Page?: unknown }).Page = (config: InputConfig): void => {
+    ensureSetData(config as { setData?: unknown; data?: unknown });
+    captured.page = config as PageConfig;
   };
   (globalThis as { App?: unknown }).App = (config: unknown): void => {
     captured.app = config;
+  };
+  (globalThis as { Component?: unknown }).Component = (
+    config: InputConfig,
+  ): void => {
+    ensureSetData(config as { setData?: unknown; data?: unknown });
+    // WeChat hoists `methods.*` onto the component instance; mirror that so
+    // tests can call e.g. `component.onPickStudent(...)` directly.
+    const methods = (config as { methods?: Record<string, unknown> }).methods;
+    if (methods && typeof methods === 'object') {
+      for (const [name, fn] of Object.entries(methods)) {
+        if (typeof fn === 'function' && !(name in config)) {
+          (config as Record<string, unknown>)[name] = fn;
+        }
+      }
+    }
+    captured.component = config as ComponentConfig;
   };
 
   const wx: WxMock['wx'] = {
@@ -92,6 +137,7 @@ export function resetWxMock(mock: WxMock): void {
   }
   mock.captured.page = null;
   mock.captured.app = null;
+  mock.captured.component = null;
   Object.values(mock.wx).forEach((fn) => fn.mockClear());
 }
 

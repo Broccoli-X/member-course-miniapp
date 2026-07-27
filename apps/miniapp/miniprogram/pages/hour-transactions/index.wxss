@@ -1,0 +1,60 @@
+.hour-transactions-page {
+  padding: 24rpx;
+}
+.txn-card {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+.txn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.txn-type {
+  font-size: 28rpx;
+  color: #333333;
+  font-weight: 500;
+}
+.txn-amount {
+  font-size: 32rpx;
+  color: #4C7DFF;
+  font-weight: 600;
+}
+.txn-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+.txn-time {
+  font-size: 24rpx;
+  color: #999999;
+}
+.txn-course {
+  font-size: 24rpx;
+  color: #999999;
+}
+.txn-reason {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx solid #f0f0f0;
+}
+.reason-label {
+  font-size: 22rpx;
+  color: #999999;
+  display: block;
+  margin-bottom: 6rpx;
+}
+.reason-text {
+  font-size: 26rpx;
+  color: #333333;
+}
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 160rpx 0;
+  color: #999999;
+  font-size: 28rpx;
+}

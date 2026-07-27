@@ -1,0 +1,40 @@
+<view class="orders-page">
+  <view wx:if="{{orders.length > 0}}">
+    <view
+      class="order-card"
+      wx:for="{{orders}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onOpenOrder"
+    >
+      <view class="order-row">
+        <text class="order-no">订单号 {{item.id}}</text>
+        <text class="order-status">{{item.status}}</text>
+      </view>
+      <view class="order-row" wx:if="{{item.confirmedAt}}">
+        <text class="order-time">{{item.confirmedAt}}</text>
+      </view>
+      <view class="order-items">
+        <view class="order-item" wx:for="{{item.items}}" wx:for-item="line" wx:key="id">
+          <text class="item-name">{{line.productNameSnapshot}}</text>
+          <view class="item-meta">
+            <text class="item-price">¥{{line.unitPriceSnapshot}}</text>
+            <text class="item-hours">{{line.hoursSnapshot}}课时</text>
+          </view>
+        </view>
+      </view>
+      <view class="order-total">
+        <text class="total-label">合计</text>
+        <text class="total-amount">¥{{item.totalAmount}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:elif="{{!loading}}">
+    <text>暂无订单</text>
+  </view>
+
+  <view class="load-more" wx:if="{{page < totalPages}}" bindtap="onLoadMore">
+    <text>{{loadingMore ? '加载中…' : '加载更多'}}</text>
+  </view>
+</view>

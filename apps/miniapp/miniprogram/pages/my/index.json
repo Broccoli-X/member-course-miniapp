@@ -1,4 +1,6 @@
 {
-  "usingComponents": {},
+  "usingComponents": {
+    "student-switcher": "../components/student-switcher/index"
+  },
   "navigationBarTitleText": "我的"
 }

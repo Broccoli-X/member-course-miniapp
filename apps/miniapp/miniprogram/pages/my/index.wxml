@@ -1,5 +1,55 @@
 <view class="my-page">
-  <view class="empty-state">
+  <block wx:if="{{isLoggedIn}}">
+    <student-switcher
+      wx:if="{{students.length > 0}}"
+      students="{{students}}"
+      current-id="{{currentStudentId}}"
+      bind:change="onStudentChange"
+    ></student-switcher>
+
+    <view class="balances" wx:if="{{balances.length > 0}}">
+      <view class="balance-card" wx:for="{{balances}}" wx:key="id">
+        <view class="balance-head">
+          <text class="balance-course">课程 {{item.courseId}}</text>
+        </view>
+        <view class="balance-buckets">
+          <view class="bucket">
+            <text class="bucket-value">{{item.available}}</text>
+            <text class="bucket-label">可用</text>
+          </view>
+          <view class="bucket">
+            <text class="bucket-value">{{item.reserved}}</text>
+            <text class="bucket-label">预留</text>
+          </view>
+          <view class="bucket">
+            <text class="bucket-value">{{item.consumed}}</text>
+            <text class="bucket-label">已消</text>
+          </view>
+          <view class="bucket">
+            <text class="bucket-value">{{item.expired}}</text>
+            <text class="bucket-label">已过期</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="entries">
+      <view class="entry" bindtap="onOpenOrders">
+        <text class="entry-title">我的订单</text>
+        <text class="entry-arrow">›</text>
+      </view>
+      <view class="entry" bindtap="onOpenPackages">
+        <text class="entry-title">课时包</text>
+        <text class="entry-arrow">›</text>
+      </view>
+      <view class="entry" bindtap="onOpenHourTransactions">
+        <text class="entry-title">课时记录</text>
+        <text class="entry-arrow">›</text>
+      </view>
+    </view>
+  </block>
+
+  <view class="empty-state" wx:else>
     <text>绑定手机号后查看会员资产</text>
   </view>
 </view>

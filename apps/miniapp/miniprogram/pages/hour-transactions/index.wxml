@@ -1,0 +1,29 @@
+<view class="hour-transactions-page">
+  <student-switcher
+    wx:if="{{students.length > 0}}"
+    students="{{students}}"
+    current-id="{{studentId}}"
+    bind:change="onStudentChange"
+  ></student-switcher>
+
+  <view wx:if="{{transactions.length > 0}}">
+    <view class="txn-card" wx:for="{{transactions}}" wx:key="id">
+      <view class="txn-head">
+        <text class="txn-type">{{item.type}}</text>
+        <text class="txn-amount">{{item.availableDelta}}</text>
+      </view>
+      <view class="txn-meta">
+        <text class="txn-time">{{item.occurredAt}}</text>
+        <text class="txn-course">课程 {{item.courseId}}</text>
+      </view>
+      <view class="txn-reason" wx:if="{{item.reason}}">
+        <text class="reason-label">原因</text>
+        <text class="reason-text">{{item.reason}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:elif="{{!loading}}">
+    <text>暂无课时记录</text>
+  </view>
+</view>

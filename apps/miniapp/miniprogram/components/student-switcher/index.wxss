@@ -1,0 +1,30 @@
+.student-switcher {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx 32rpx;
+  margin-bottom: 24rpx;
+}
+.switcher-label {
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 16rpx;
+}
+.switcher-list {
+  white-space: nowrap;
+}
+.switcher-chip {
+  display: inline-block;
+  padding: 12rpx 28rpx;
+  margin-right: 16rpx;
+  border-radius: 32rpx;
+  background-color: #f2f3f5;
+  color: #333333;
+  font-size: 26rpx;
+  border: 2rpx solid transparent;
+}
+.switcher-chip--active {
+  background-color: #eaf0ff;
+  color: #4C7DFF;
+  border-color: #4C7DFF;
+  font-weight: 500;
+}
