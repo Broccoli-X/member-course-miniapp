@@ -1,6 +1,12 @@
 <view class="courses-page">
   <block wx:if="{{courses.length > 0}}">
-    <view class="course-card" wx:for="{{courses}}" wx:key="id">
+    <view
+      class="course-card"
+      wx:for="{{courses}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onOpenCourse"
+    >
       <text>{{item.name}}</text>
       <text class="course-desc">{{item.description}}</text>
     </view>

@@ -1,0 +1,26 @@
+<view class="course-detail-page">
+  <block wx:if="{{notFound}}">
+    <view class="empty-state">
+      <text>课程不存在或已下架</text>
+    </view>
+  </block>
+  <block wx:elif="{{course}}">
+    <view class="course-header">
+      <text class="course-name">{{course.name}}</text>
+      <text class="course-desc">{{course.description}}</text>
+    </view>
+
+    <view class="packages" wx:if="{{packages.length > 0}}">
+      <view class="package-card" wx:for="{{packages}}" wx:key="id">
+        <text class="package-name">{{item.name}}</text>
+        <view class="package-meta">
+          <text class="package-price">¥{{item.price}}</text>
+          <text class="package-hours">{{item.hours}}课时</text>
+        </view>
+      </view>
+    </view>
+    <view class="empty-state" wx:else>
+      <text>暂无可购课时包</text>
+    </view>
+  </block>
+</view>

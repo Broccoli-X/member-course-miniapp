@@ -1,0 +1,46 @@
+<view class="student-edit-page">
+  <view class="form-row">
+    <text class="form-label">姓名</text>
+    <input
+      class="form-input"
+      value="{{displayName}}"
+      placeholder="请输入学员姓名"
+      bindinput="onDisplayNameInput"
+    />
+  </view>
+
+  <view class="form-row" wx:if="{{mode === 'create'}}">
+    <text class="form-label">关系</text>
+    <radio-group bindchange="onRelationshipChange">
+      <label class="radio-option">
+        <radio value="SELF" checked="{{relationship === 'SELF'}}" />
+        <text>本人</text>
+      </label>
+      <label class="radio-option">
+        <radio value="GUARDIAN" checked="{{relationship === 'GUARDIAN'}}" />
+        <text>家长/监护人</text>
+      </label>
+    </radio-group>
+  </view>
+  <view class="form-row" wx:else>
+    <text class="form-label">关系</text>
+    <text class="form-value">{{relationship === 'SELF' ? '本人' : '家长/监护人'}}</text>
+  </view>
+
+  <view class="form-row">
+    <text class="form-label">出生日期</text>
+    <input
+      class="form-input"
+      value="{{birthDate}}"
+      placeholder="YYYY-MM-DD（可选）"
+      bindinput="onBirthDateInput"
+    />
+  </view>
+
+  <button
+    class="save-button"
+    type="primary"
+    bindtap="onSave"
+    loading="{{submitting}}"
+  >保存</button>
+</view>

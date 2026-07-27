@@ -1,0 +1,37 @@
+<view class="students-page">
+  <block wx:if="{{students.length > 0}}">
+    <view
+      class="student-card {{currentId === item.id ? 'student-card--active' : ''}}"
+      wx:for="{{students}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onSelectStudent"
+    >
+      <view class="student-info">
+        <text class="student-name">{{item.displayName}}</text>
+        <text wx:if="{{item.birthDate}}" class="student-birth">出生日期 {{item.birthDate}}</text>
+      </view>
+      <text
+        wx:if="{{currentId === item.id}}"
+        class="student-check"
+      >已选</text>
+      <text
+        wx:else
+        class="student-edit"
+        catchtap="onEditStudent"
+        data-id="{{item.id}}"
+      >编辑</text>
+    </view>
+  </block>
+  <view class="empty-state" wx:else>
+    <text>暂无学员</text>
+    <text class="empty-hint">点击下方按钮添加学员</text>
+  </view>
+
+  <button
+    class="add-student-button"
+    type="primary"
+    bindtap="onAddStudent"
+    loading="{{loading}}"
+  >添加学员</button>
+</view>

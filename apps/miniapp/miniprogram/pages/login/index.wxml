@@ -1,0 +1,14 @@
+<view class="login-page">
+  <view class="login-hero">
+    <text class="login-title">会员课时管理</text>
+    <text class="login-subtitle">使用微信账号登录</text>
+  </view>
+  <button
+    class="login-button"
+    type="primary"
+    loading="{{loading}}"
+    bindtap="onLogin"
+  >
+    微信一键登录
+  </button>
+</view>

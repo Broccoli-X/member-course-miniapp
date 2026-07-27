@@ -1,5 +1,13 @@
 {
-  "pages": ["pages/courses/index", "pages/my/index"],
+  "pages": [
+    "pages/courses/index",
+    "pages/course-detail/index",
+    "pages/login/index",
+    "pages/bind-phone/index",
+    "pages/students/index",
+    "pages/student-edit/index",
+    "pages/my/index"
+  ],
   "window": {
     "navigationBarTitleText": "会员课时管理",
     "navigationBarBackgroundColor": "#ffffff",

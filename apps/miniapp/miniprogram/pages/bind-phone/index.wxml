@@ -1,0 +1,15 @@
+<view class="bind-phone-page">
+  <view class="bind-phone-hero">
+    <text class="bind-phone-title">绑定手机号</text>
+    <text class="bind-phone-subtitle">完成手机号验证后即可查看会员资产</text>
+  </view>
+  <button
+    class="bind-phone-button"
+    type="primary"
+    open-type="getPhoneNumber"
+    bindgetphonenumber="onGetPhoneNumber"
+    loading="{{loading}}"
+  >
+    微信手机号一键绑定
+  </button>
+</view>
